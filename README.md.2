@@ -1,0 +1,65 @@
+# `node-monorepo-demo`
+
+Short Node.js monorepo / multi-module demo that follows the lifecycle mapping from `temp.md`.
+
+### Modules
+
+- `@demo/module-a` - base module `a`
+- `@demo/module-b` - base module `b`
+- `@demo/module-c` - depends on `a` and `b`
+- `@demo/module-d` - depends on `c`
+
+### Build output
+
+Each module build creates both outputs under `packages/<module>/dist`:
+
+- `index.js` - non-minified artifact
+- `index.min.js` - minified artifact with legal comments preserved
+
+Package tarballs are created under `.artifacts`, and deployment descriptors are prepared under `.deploy`.
+
+### Scripts
+
+Use Node from `C:\pub\node-v24.15.0-win-x64`.
+
+Run the lifecycle from the repository root in this order:
+
+```powershell
+$env:Path = 'C:\pub\node-v24.15.0-win-x64;' + $env:Path
+npm ci
+npm run clean
+npm run validate
+npm run format
+npm run lint
+npm run build
+npm test
+npm run pre-integration-test
+npm run integration-test
+npm run post-integration-test
+npm run pre-e2e-test
+npm run e2e-test
+npm run post-e2e-test
+npm run coverage
+npm run security
+npm run verify
+npm run package
+npm run sbom
+npm run sign
+npm run install-local
+npm run publish
+npm run deploy
+```
+
+### Build one module
+
+Example for module `a` only:
+
+```powershell
+$env:Path = 'C:\pub\node-v24.15.0-win-x64;' + $env:Path
+Set-Location .\packages\a
+npm run validate
+npm run build
+npm test
+npm run integration-test
+npm run e2e-test
+```
