@@ -141,3 +141,12 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# IDE
+.idea/
+
+# Lifecycle tool output (packaged tarballs, deploy descriptors, signatures, site reports)
+.artifacts/
+.deploy/
+.signatures/
+site/

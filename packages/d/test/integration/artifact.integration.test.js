@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createDescriptorFromD, createMessageFromD, qux } from "../../dist/index.js";
+import {
+  createDescriptorFromD,
+  createMessageFromD,
+  qux,
+} from "../../dist/index.js";
 
 test("module d integration uses the built non-minified artifact", () => {
   assert.equal(

@@ -211,11 +211,17 @@ async function serve(parsedArgs) {
       request.url ?? "/",
       `http://${request.headers.host ?? "127.0.0.1"}`,
     );
-    const requestPath = requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
-    const normalizedPath = path.normalize(decodeURIComponent(requestPath)).replace(/^[\\/]+/, "");
+    const requestPath =
+      requestUrl.pathname === "/" ? "/index.html" : requestUrl.pathname;
+    const normalizedPath = path
+      .normalize(decodeURIComponent(requestPath))
+      .replace(/^[\\/]+/, "");
     const filePath = path.resolve(directory, normalizedPath);
 
-    if (!filePath.startsWith(directory)) {
+    // Boundary check with the separator appended: a bare
+    // startsWith(directory) would also accept a SIBLING directory whose
+    // name merely starts with the served one (/srv/web vs /srv/web-evil).
+    if (filePath !== directory && !filePath.startsWith(directory + path.sep)) {
       response.writeHead(403);
       response.end("Forbidden");
       return;
@@ -227,8 +233,13 @@ async function serve(parsedArgs) {
       if (stat.isDirectory()) {
         const indexFilePath = path.join(filePath, "index.html");
 
-        if (fs.existsSync(indexFilePath) && fs.statSync(indexFilePath).isFile()) {
-          response.writeHead(200, { "Content-Type": getContentType(indexFilePath) });
+        if (
+          fs.existsSync(indexFilePath) &&
+          fs.statSync(indexFilePath).isFile()
+        ) {
+          response.writeHead(200, {
+            "Content-Type": getContentType(indexFilePath),
+          });
           fs.createReadStream(indexFilePath).pipe(response);
           return;
         }
@@ -260,7 +271,10 @@ function renderDirectoryListing(requestPath, directoryPath) {
     .sort((left, right) => left.name.localeCompare(right.name))
     .map((entry) => {
       const suffix = entry.isDirectory() ? "/" : "";
-      const href = new URL(`${encodeURIComponent(entry.name)}${suffix}`, `http://127.0.0.1${ensureTrailingSlash(requestPath)}`).pathname;
+      const href = new URL(
+        `${encodeURIComponent(entry.name)}${suffix}`,
+        `http://127.0.0.1${ensureTrailingSlash(requestPath)}`,
+      ).pathname;
 
       return `<li><a href="${escapeHtml(href)}">${escapeHtml(entry.name)}${suffix}</a></li>`;
     })
@@ -308,24 +322,35 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+// Extension -> MIME map covering what a browser module/asset pipeline
+// actually serves (styles, images, fonts, source maps) - a stylesheet
+// delivered as application/octet-stream is silently ignored by browsers,
+// which matters once LESS/CSS and framework-app modules move in.
+const contentTypeByExtension = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".mjs": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+};
+
 function getContentType(filePath) {
-  if (filePath.endsWith(".html")) {
-    return "text/html; charset=utf-8";
-  }
+  const extension = path.extname(filePath).toLowerCase();
 
-  if (filePath.endsWith(".json")) {
-    return "application/json; charset=utf-8";
-  }
-
-  if (filePath.endsWith(".js")) {
-    return "application/javascript; charset=utf-8";
-  }
-
-  if (filePath.endsWith(".txt")) {
-    return "text/plain; charset=utf-8";
-  }
-
-  return "application/octet-stream";
+  return contentTypeByExtension[extension] ?? "application/octet-stream";
 }
 
 function printUsageAndExit(code = 1) {

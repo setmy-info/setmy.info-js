@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createDescriptorFromD, createMessageFromD, qux } from "../../src/index.js";
+import {
+  createDescriptorFromD,
+  createMessageFromD,
+  qux,
+} from "../../src/index.js";
 
 test("module d composes module c", () => {
   assert.equal(

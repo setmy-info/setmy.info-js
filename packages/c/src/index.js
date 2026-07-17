@@ -23,4 +23,3 @@ export function createDescriptorFromC() {
 export function createMessageFromC() {
   return `${createDescriptorFromA().message} + ${createDescriptorFromB().message} -> module-c`;
 }
-

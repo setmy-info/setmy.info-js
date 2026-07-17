@@ -2,7 +2,9 @@
 
 import { execSync } from "node:child_process";
 
+import { npmCommand } from "./workspace-utils.js";
+
 console.log("Running npm audit for workspace dependencies");
-execSync("npm.cmd audit --omit=dev", {
+execSync(`${npmCommand} audit --omit=dev`, {
   stdio: "inherit",
 });

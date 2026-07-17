@@ -35,7 +35,11 @@ export function runPhaseTests(requestedPhase, extraArgs = cliArgs) {
 
   const testFiles = fs
     .readdirSync(phaseDirectory, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".test.js"))
+    .filter(
+      (entry) =>
+        entry.isFile() &&
+        (entry.name.endsWith(".test.js") || entry.name.endsWith(".test.ts")),
+    )
     .map((entry) => path.join(entry.parentPath, entry.name))
     .map((filePath) => path.relative(workspace.workspace, filePath));
 
@@ -48,7 +52,7 @@ export function runPhaseTests(requestedPhase, extraArgs = cliArgs) {
 
   console.log(`Running ${requestedPhase} tests for ${workspace.packageName}`);
 
-  execFileSync(process.execPath, ["--test", ...testFiles, ...extraArgs], {
+  execFileSync(process.execPath, ["--test", ...extraArgs, ...testFiles], {
     cwd: workspace.workspace,
     stdio: "inherit",
   });

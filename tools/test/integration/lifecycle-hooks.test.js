@@ -6,14 +6,29 @@ import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const preIntegrationToolPath = path.join(rootDir, "tools", "preintegration-test.js");
-const postIntegrationToolPath = path.join(rootDir, "tools", "postintegration-test.js");
+const rootDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+);
+const preIntegrationToolPath = path.join(
+  rootDir,
+  "tools",
+  "preintegration-test.js",
+);
+const postIntegrationToolPath = path.join(
+  rootDir,
+  "tools",
+  "postintegration-test.js",
+);
 const preE2eToolPath = path.join(rootDir, "tools", "pree2e-test.js");
 const postE2eToolPath = path.join(rootDir, "tools", "poste2e-test.js");
 
 test("lifecycle tools execute package-local hook files when present", () => {
-  const workspaceDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "demo-hooks-"));
+  const workspaceDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "demo-hooks-"),
+  );
   const artifactPath = path.join(workspaceDirectory, "hook-log.json");
 
   try {
@@ -68,12 +83,18 @@ test("lifecycle tools execute package-local hook files when present", () => {
 });
 
 test("lifecycle tools stay no-op when package-local hook files are absent", () => {
-  const workspaceDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "demo-hooks-empty-"));
+  const workspaceDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "demo-hooks-empty-"),
+  );
 
   try {
     fs.writeFileSync(
       path.join(workspaceDirectory, "package.json"),
-      JSON.stringify({ name: "@demo/test-hooks-empty", type: "module" }, null, 2),
+      JSON.stringify(
+        { name: "@demo/test-hooks-empty", type: "module" },
+        null,
+        2,
+      ),
     );
 
     execFileSync(process.execPath, [preIntegrationToolPath], {
@@ -93,7 +114,10 @@ test("lifecycle tools stay no-op when package-local hook files are absent", () =
       stdio: "pipe",
     });
 
-    assert.equal(fs.existsSync(path.join(workspaceDirectory, "hook-log.json")), false);
+    assert.equal(
+      fs.existsSync(path.join(workspaceDirectory, "hook-log.json")),
+      false,
+    );
   } finally {
     fs.rmSync(workspaceDirectory, { recursive: true, force: true });
   }

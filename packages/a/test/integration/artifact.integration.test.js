@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createDescriptorFromA, createMessageFromA, foo } from "../../dist/index.js";
+import {
+  createDescriptorFromA,
+  createMessageFromA,
+  foo,
+} from "../../dist/index.js";
 
 test("module a integration uses the built non-minified artifact", () => {
   assert.equal(createMessageFromA(), "message from module-a");

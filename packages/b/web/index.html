@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Module B demo server</title>
+  </head>
+  <body>
+    <main>
+      <h1>Module B web example</h1>
+      <p>This page is served from <code>packages/b/web</code>.</p>
+      <p>
+        Running <code>npm run server</code> serves this
+        <code>index.html</code> by default.
+      </p>
+      <p id="message">Loading module-b…</p>
+    </main>
+    <script type="module">
+      import { createMessageFromB } from "./dist/index.min.js";
+
+      document.getElementById("message").textContent = createMessageFromB();
+    </script>
+  </body>
+</html>

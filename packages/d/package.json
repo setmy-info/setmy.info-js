@@ -5,7 +5,16 @@
   "license": "MIT",
   "author": "Imre Tabur <imre.tabur@mail.ee>",
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "main": "./dist/index.js",
+  "config": {
+    "server": {
+      "port": 43431,
+      "directory": "web"
+    }
+  },
   "exports": {
     ".": {
       "default": "./dist/index.js"
@@ -24,6 +33,7 @@
     "validate": "node ../../tools/validate.js",
     "format": "prettier --write .",
     "lint": "eslint .",
+    "resources": "node ../../tools/resources.js",
     "build": "node ../../tools/build.js",
     "server": "node ../../tools/http-server.js",
     "stop-server": "node ../../tools/http-server.js stop",
@@ -42,6 +52,8 @@
     "sign": "node ../../tools/sign.js",
     "install-local": "node ../../tools/install-local.js",
     "publish": "node ../../tools/publish.js",
-    "deploy": "node ../../tools/deploy.js"
+    "deploy": "node ../../tools/deploy.js",
+    "docs": "node ../../tools/docs.js",
+    "site": "node ../../tools/site.js"
   }
 }

@@ -5,6 +5,7 @@ import { execSync } from "node:child_process";
 
 import {
   getWorkspaces,
+  npmCommand,
   rootDir,
   sortWorkspacesTopologically,
 } from "./workspace-utils.js";
@@ -38,7 +39,7 @@ for (const workspace of orderedWorkspaces) {
     args.push("--", ...forwardArgs);
   }
 
-  execSync(`npm.cmd ${args.join(" ")}`, {
+  execSync(`${npmCommand} ${args.join(" ")}`, {
     cwd: workspace.workspace,
     stdio: "inherit",
     env: {

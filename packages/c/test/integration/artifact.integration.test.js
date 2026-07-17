@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { baz, createDescriptorFromC, createMessageFromC } from "../../dist/index.js";
+import {
+  baz,
+  createDescriptorFromC,
+  createMessageFromC,
+} from "../../dist/index.js";
 
 test("module c integration uses the built non-minified artifact", () => {
   assert.equal(

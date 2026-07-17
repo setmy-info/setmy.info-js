@@ -22,4 +22,3 @@ export function createDescriptorFromD() {
 export function createMessageFromD() {
   return `${createMessageFromC()} -> module-d`;
 }
-

@@ -2,7 +2,9 @@
 
 import { execSync } from "node:child_process";
 
+import { npmCommand } from "./workspace-utils.js";
+
 console.log("Running workspace bootstrap via npm ci");
-execSync("npm.cmd ci", {
+execSync(`${npmCommand} ci`, {
   stdio: "inherit",
 });

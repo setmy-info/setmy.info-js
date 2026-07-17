@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createDescriptorFromA, createMessageFromA, foo } from "../../src/index.js";
+import {
+  createDescriptorFromA,
+  createMessageFromA,
+  foo,
+} from "../../src/index.js";
 
 test("module a exposes its message", () => {
   assert.equal(createMessageFromA(), "message from module-a");

@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 import {
   ensureDirectory,
   getWorkspaceInfo,
+  npmCommand,
   rootDir,
   toArtifactDirectoryName,
 } from "./workspace-utils.js";
@@ -47,7 +48,7 @@ if (requestedSbom) {
   process.exit(0);
 }
 
-execSync(`npm.cmd pack --pack-destination "${artifactsDir}"`, {
+execSync(`${npmCommand} pack --pack-destination "${artifactsDir}"`, {
   cwd: workspace.workspace,
   stdio: "inherit",
 });

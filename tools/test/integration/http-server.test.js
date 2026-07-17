@@ -6,12 +6,19 @@ import { execFileSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const rootDir = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+);
 const toolPath = path.join(rootDir, "tools", "http-server.js");
 const stateDirectory = path.join(rootDir, ".artifacts", "http-servers");
 
 test("http server tool starts, serves files, and stops by port", async () => {
-  const tempDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "demo-http-server-"));
+  const tempDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "demo-http-server-"),
+  );
   const port = 43123;
   const filePath = path.join(tempDirectory, "index.html");
 
@@ -49,10 +56,14 @@ test("http server tool starts, serves files, and stops by port", async () => {
     });
   } finally {
     try {
-      execFileSync(process.execPath, [toolPath, "stop", "--port", String(port)], {
-        cwd: rootDir,
-        stdio: "pipe",
-      });
+      execFileSync(
+        process.execPath,
+        [toolPath, "stop", "--port", String(port)],
+        {
+          cwd: rootDir,
+          stdio: "pipe",
+        },
+      );
     } catch {
       // ignore cleanup failures in test teardown
     }
@@ -62,21 +73,28 @@ test("http server tool starts, serves files, and stops by port", async () => {
 });
 
 test("http server tool requires a valid directory when starting", () => {
-  assert.throws(
-    () => {
-      execFileSync(
-        process.execPath,
-        [toolPath, "start", "--port", "43124", "--directory", path.join(os.tmpdir(), "missing-directory")],
-        { cwd: rootDir, stdio: "pipe" },
-      );
-    },
-    /Directory does not exist/,
-  );
+  assert.throws(() => {
+    execFileSync(
+      process.execPath,
+      [
+        toolPath,
+        "start",
+        "--port",
+        "43124",
+        "--directory",
+        path.join(os.tmpdir(), "missing-directory"),
+      ],
+      { cwd: rootDir, stdio: "pipe" },
+    );
+  }, /Directory does not exist/);
 });
 
 test("workspace server uses package.json defaults and serves index.html for slash requests", async () => {
-  const workspaceDirectory = path.join(rootDir, "packages", "a");
-  const port = 43131;
+  // Self-contained fixture workspace, NOT one of the packages/* demo
+  // modules - the demo modules are meant to be replaced by real code,
+  // and the tooling's own tests must survive that.
+  const port = 43141;
+  const workspaceDirectory = createFixtureWorkspace(port);
   const stateFile = path.join(stateDirectory, `${port}.json`);
 
   try {
@@ -94,7 +112,7 @@ test("workspace server uses package.json defaults and serves index.html for slas
       const response = await fetch(`http://127.0.0.1:${port}/`);
       const body = await response.text();
       assert.equal(response.status, 200);
-      assert.match(body, /Module A web example/);
+      assert.match(body, /Fixture workspace/);
     });
 
     assert.equal(fs.existsSync(stateFile), true);
@@ -118,12 +136,13 @@ test("workspace server uses package.json defaults and serves index.html for slas
     }
 
     fs.rmSync(stateFile, { force: true });
+    fs.rmSync(workspaceDirectory, { recursive: true, force: true });
   }
 });
 
 test("workspace server lists directory contents when no index.html exists", async () => {
-  const workspaceDirectory = path.join(rootDir, "packages", "a");
-  const port = 43131;
+  const port = 43142;
+  const workspaceDirectory = createFixtureWorkspace(port);
 
   try {
     execFileSync(process.execPath, [toolPath, "stop"], {
@@ -137,11 +156,11 @@ test("workspace server lists directory contents when no index.html exists", asyn
     });
 
     await waitFor(async () => {
-      const response = await fetch(`http://127.0.0.1:${port}/empty/`);
+      const response = await fetch(`http://127.0.0.1:${port}/plain/`);
       const body = await response.text();
       assert.equal(response.status, 200);
-      assert.match(body, /Index of \/empty\//);
-      assert.match(body, /\.empty/);
+      assert.match(body, /Index of \/plain\//);
+      assert.match(body, /placeholder\.txt/);
     });
   } finally {
     try {
@@ -152,12 +171,14 @@ test("workspace server lists directory contents when no index.html exists", asyn
     } catch {
       // ignore cleanup failures in test teardown
     }
+
+    fs.rmSync(workspaceDirectory, { recursive: true, force: true });
   }
 });
 
 test("workspace server returns an HTML error page for missing directories", async () => {
-  const workspaceDirectory = path.join(rootDir, "packages", "a");
-  const port = 43131;
+  const port = 43143;
+  const workspaceDirectory = createFixtureWorkspace(port);
 
   try {
     execFileSync(process.execPath, [toolPath, "stop"], {
@@ -187,18 +208,43 @@ test("workspace server returns an HTML error page for missing directories", asyn
     } catch {
       // ignore cleanup failures in test teardown
     }
+
+    fs.rmSync(workspaceDirectory, { recursive: true, force: true });
   }
 });
 
-test("workspace package exposes an explicit stop-server script", () => {
-  const workspacePackageJsonPath = path.join(rootDir, "packages", "a", "package.json");
-  const workspacePackageJson = JSON.parse(fs.readFileSync(workspacePackageJsonPath, "utf8"));
-
-  assert.equal(
-    workspacePackageJson.scripts["stop-server"],
-    "node ../../tools/http-server.js stop",
+function createFixtureWorkspace(port) {
+  const workspaceDirectory = fs.mkdtempSync(
+    path.join(os.tmpdir(), "demo-http-server-workspace-"),
   );
-});
+
+  fs.writeFileSync(
+    path.join(workspaceDirectory, "package.json"),
+    JSON.stringify(
+      {
+        name: "@demo/test-http-server",
+        type: "module",
+        config: { server: { port, directory: "web" } },
+      },
+      null,
+      2,
+    ),
+  );
+
+  fs.mkdirSync(path.join(workspaceDirectory, "web", "plain"), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(workspaceDirectory, "web", "index.html"),
+    "<h1>Fixture workspace</h1>",
+  );
+  fs.writeFileSync(
+    path.join(workspaceDirectory, "web", "plain", "placeholder.txt"),
+    "placeholder",
+  );
+
+  return workspaceDirectory;
+}
 
 async function waitFor(callback, timeoutMs = 5_000) {
   const startedAt = Date.now();
