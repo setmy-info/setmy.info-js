@@ -445,14 +445,14 @@ branch is this."
 29. **Fixed: every branch-name check in `ci.yml` used bare
     `github.ref_name`, which resolves to the wrong value on
     `pull_request`-triggered runs.** This file triggers on both `push:
-    branches: ["**"]` and `pull_request` (already flagged as a
+branches: ["**"]` and `pull_request` (already flagged as a
     double-build in backlog item 25), so an in-repo PR from `develop`
     produces two runs for the same commit: a `push` run, where
     `github.ref_name` really is `"develop"`, and a `pull_request` run,
     where `github.ref` is the synthetic `refs/pull/<N>/merge` ref, so
     `github.ref_name` is something like `"12/merge"` — never matching
     `devel*`/`release*`/`master`. Every `startsWith(github.ref_name,
-    ...)`/`github.ref_name == 'master'` check (Publish's four jobs,
+...)`/`github.ref_name == 'master'` check (Publish's four jobs,
     Deploy's four jobs' job- and step-level `if:`, Tag, and the
     `CI_BRANCH_NAME` passed into `tools/publish.js`) silently evaluated
     false on that second run, skipping Publish/Deploy/Tag even though the
@@ -462,7 +462,7 @@ branch is this."
     CI was broken, even though the sibling `push`-triggered run for the
     exact same commit ran them correctly. Fixed by replacing every
     `github.ref_name` used for branch-gating with `(github.head_ref ||
-    github.ref_name)` — `github.head_ref` is set only on `pull_request`
+github.ref_name)` — `github.head_ref` is set only on `pull_request`
     events and holds the real source branch name, `github.ref_name` alone
     is already correct on `push`, so the `||` resolves correctly for both
     trigger types. Verified all 12 call sites were updated consistently
