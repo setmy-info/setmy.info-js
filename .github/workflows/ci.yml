@@ -286,7 +286,7 @@ jobs:
 
   deploy-test:
     name: Deploy / test
-    needs: build
+    needs: [build, publish-complete]
     if: >
       startsWith(github.ref_name, 'devel') ||
       startsWith(github.ref_name, 'release')
@@ -307,7 +307,7 @@ jobs:
 
   deploy-prelive:
     name: Deploy / prelive
-    needs: build
+    needs: [build, publish-complete]
     if: startsWith(github.ref_name, 'release')
     runs-on: ubuntu-latest
     steps:
@@ -324,7 +324,7 @@ jobs:
 
   deploy-live:
     name: Deploy / live
-    needs: build
+    needs: [build, publish-complete]
     if: github.ref_name == 'master'
     runs-on: ubuntu-latest
     steps:
