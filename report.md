@@ -483,7 +483,7 @@ job-gating semantics by hand) said this should already work — but static
 analysis without access to the actual run's logs couldn't get further, and
 guessing wrong again wasn't an acceptable next step. Rather than keep
 patching around the `push`/`pull_request` dual-trigger ambiguity (which
-requires correctly resolving branch name for *two* different event
+requires correctly resolving branch name for _two_ different event
 context shapes, is easy to get subtly wrong, and had already been gotten
 wrong once), escalated to removing the ambiguity's source entirely:
 
@@ -501,7 +501,7 @@ wrong once), escalated to removing the ambiguity's source entirely:
     `if:` conditions now spell out `needs.<job>.result == 'success'` for
     each of their direct `needs` explicitly**, instead of resting solely
     on GitHub Actions' implicit default job-gating (a job whose own `if:`
-    doesn't call a status-check function is *also* implicitly required to
+    doesn't call a status-check function is _also_ implicitly required to
     have every direct `needs` job succeed). That implicit rule is
     documented and was already believed correct — this change doesn't
     contradict it — but for the one guarantee that must never silently
