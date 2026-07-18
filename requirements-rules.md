@@ -23,26 +23,26 @@ decisions:
   origin of the Inspection/Preparation/Build/.../Tag stage structure, the
   `<SOURCE>_TO_<TARGET>` deploy-flag naming, and the startup/inspection sanity-check pattern (§3.8) — read the file
   itself, not just this document's summary of it, before implementing §3 in a new language:
-    - Repo: `git@github.com:setmy-info/jenkinsfile-starter.git` /
-      `https://github.com/setmy-info/jenkinsfile-starter` (default branch:
-      `master`)
-    - Local checkout used for this work:
-      `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter`
-    - The template file itself:
-      `Jenkinsfile` at the repo root — local path
-      `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter/Jenkinsfile`, web URL
-      `https://github.com/setmy-info/jenkinsfile-starter/blob/master/Jenkinsfile`.
-      `src/Jenkinsfile.groovy` in the same repo is a symlink to the root
-      `Jenkinsfile` (same content by construction) — treat the root
-      `Jenkinsfile` as canonical.
-    - This template repo's own branches (`master`, `develop`,
-      `feature/something`, `release/1.0.0`) are themselves a working example of the exact branch model §3.1 requires.
-    - The npm implementation's own migrated copy — what §3.7-§3.10 actually look like once satisfied — is `Jenkinsfile`
-      at the root of
-      `setmy.info-js`: local path
-      `/home/has/sources/components/setmy.info/submodules/setmy.info-js/Jenkinsfile`, repo
-      `git@github.com:setmy-info/setmy.info-js.git` /
-      `https://github.com/setmy-info/setmy.info-js`.
+  - Repo: `git@github.com:setmy-info/jenkinsfile-starter.git` /
+    `https://github.com/setmy-info/jenkinsfile-starter` (default branch:
+    `master`)
+  - Local checkout used for this work:
+    `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter`
+  - The template file itself:
+    `Jenkinsfile` at the repo root — local path
+    `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter/Jenkinsfile`, web URL
+    `https://github.com/setmy-info/jenkinsfile-starter/blob/master/Jenkinsfile`.
+    `src/Jenkinsfile.groovy` in the same repo is a symlink to the root
+    `Jenkinsfile` (same content by construction) — treat the root
+    `Jenkinsfile` as canonical.
+  - This template repo's own branches (`master`, `develop`,
+    `feature/something`, `release/1.0.0`) are themselves a working example of the exact branch model §3.1 requires.
+  - The npm implementation's own migrated copy — what §3.7-§3.10 actually look like once satisfied — is `Jenkinsfile`
+    at the root of
+    `setmy.info-js`: local path
+    `/home/has/sources/components/setmy.info/submodules/setmy.info-js/Jenkinsfile`, repo
+    `git@github.com:setmy-info/setmy.info-js.git` /
+    `https://github.com/setmy-info/setmy.info-js`.
 
 ## 1. Core principle
 
@@ -65,30 +65,30 @@ In the order they run, `[gate]` = fails the whole build on failure,
 `checkstyle:check` gates, `checkstyle:
 checkstyle` — the report goal — doesn't):
 
-| #  | Phase                                   | Gate/report                                     | Notes                                                                                                                                                       |
-|----|-----------------------------------------|-------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1  | Bootstrap                               | gate                                            | Reproducible dependency install (`npm ci`-equivalent: lockfile-exact, not "latest matching range").                                                         |
-| 2  | Clean                                   | gate                                            | Removes all generated output. MUST be safe to run from a dirty state.                                                                                       |
-| 3  | Validate                                | gate                                            | Structural sanity (required files/fields exist) + language type-check if the language has one and the module opted into strict typing (§9).                 |
-| 4  | Format check                            | gate                                            | MUST NOT modify files — see §10 rule 10.3, this exact mistake was made and fixed once already.                                                              |
-| 5  | Lint                                    | gate                                            | Style/correctness rules.                                                                                                                                    |
-| 6  | Resources                               | gate                                            | See §6 — resource filtering. Runs before Compile, same as Maven's `generate-resources`/`process-resources` preceding `compile`.                             |
-| 7  | Compile/Build                           | gate                                            | Produces the build artifact(s). MUST NOT perform type-checking if that's already Validate's job (§9) — don't duplicate the gate in two phases.              |
-| 8  | Unit test                               | gate                                            | Fast, no I/O, no network, no filesystem beyond source under test.                                                                                           |
-| 9  | Pre-integration-test                    | gate, `always()` cleanup paired                 | Starts any process/server integration tests need running.                                                                                                   |
-| 10 | Integration test                        | gate                                            | Tests against the _built_ artifact, not source.                                                                                                             |
-| 11 | Post-integration-test                   | **`always()`, never skipped**                   | MUST run even if step 10 failed — see §7 rule 7.4.                                                                                                          |
-| 12 | Pre-e2e-test / E2E test / Post-e2e-test | same shape as 9-11                              | See §7 rule 7.5 — MUST include at least one test that talks to a _running instance_ over a real protocol (HTTP, etc.), not just re-import the build output. |
-| 13 | Coverage                                | report                                          |                                                                                                                                                             |
-| 14 | Security                                | report locally, MAY gate in CI on real findings | Dependency vulnerability scan.                                                                                                                              |
-| 15 | Verify                                  | gate                                            | Confirms expected artifacts exist/are well-formed.                                                                                                          |
-| 16 | Package                                 | gate                                            | Produces the distributable artifact (tarball/wheel/archive/whatever the ecosystem calls it).                                                                |
-| 17 | SBOM                                    | report                                          | CycloneDX or an org-approved equivalent.                                                                                                                    |
-| 18 | Sign                                    | gate (if enabled)                               | See §11 — currently a checksum placeholder in the npm implementation, not a real signature; don't copy that gap forward without noting it.                  |
-| 19 | Install (local)                         | gate                                            | Installs the built artifact into the local toolchain's cache/store for other local projects to consume — Maven's `install`.                                 |
-| 20 | Publish                                 | gate, **dry-run by default**                    | See §10.                                                                                                                                                    |
-| 21 | Deploy                                  | gate, **prepared-not-executed by default**      | See §10.                                                                                                                                                    |
-| 22 | Site                                    | report                                          | Separate from the phases above, same as Maven's separate Site lifecycle — see §8.                                                                           |
+| #   | Phase                                   | Gate/report                                     | Notes                                                                                                                                                       |
+| --- | --------------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Bootstrap                               | gate                                            | Reproducible dependency install (`npm ci`-equivalent: lockfile-exact, not "latest matching range").                                                         |
+| 2   | Clean                                   | gate                                            | Removes all generated output. MUST be safe to run from a dirty state.                                                                                       |
+| 3   | Validate                                | gate                                            | Structural sanity (required files/fields exist) + language type-check if the language has one and the module opted into strict typing (§9).                 |
+| 4   | Format check                            | gate                                            | MUST NOT modify files — see §10 rule 10.3, this exact mistake was made and fixed once already.                                                              |
+| 5   | Lint                                    | gate                                            | Style/correctness rules.                                                                                                                                    |
+| 6   | Resources                               | gate                                            | See §6 — resource filtering. Runs before Compile, same as Maven's `generate-resources`/`process-resources` preceding `compile`.                             |
+| 7   | Compile/Build                           | gate                                            | Produces the build artifact(s). MUST NOT perform type-checking if that's already Validate's job (§9) — don't duplicate the gate in two phases.              |
+| 8   | Unit test                               | gate                                            | Fast, no I/O, no network, no filesystem beyond source under test.                                                                                           |
+| 9   | Pre-integration-test                    | gate, `always()` cleanup paired                 | Starts any process/server integration tests need running.                                                                                                   |
+| 10  | Integration test                        | gate                                            | Tests against the _built_ artifact, not source.                                                                                                             |
+| 11  | Post-integration-test                   | **`always()`, never skipped**                   | MUST run even if step 10 failed — see §7 rule 7.4.                                                                                                          |
+| 12  | Pre-e2e-test / E2E test / Post-e2e-test | same shape as 9-11                              | See §7 rule 7.5 — MUST include at least one test that talks to a _running instance_ over a real protocol (HTTP, etc.), not just re-import the build output. |
+| 13  | Coverage                                | report                                          |                                                                                                                                                             |
+| 14  | Security                                | report locally, MAY gate in CI on real findings | Dependency vulnerability scan.                                                                                                                              |
+| 15  | Verify                                  | gate                                            | Confirms expected artifacts exist/are well-formed.                                                                                                          |
+| 16  | Package                                 | gate                                            | Produces the distributable artifact (tarball/wheel/archive/whatever the ecosystem calls it).                                                                |
+| 17  | SBOM                                    | report                                          | CycloneDX or an org-approved equivalent.                                                                                                                    |
+| 18  | Sign                                    | gate (if enabled)                               | See §11 — currently a checksum placeholder in the npm implementation, not a real signature; don't copy that gap forward without noting it.                  |
+| 19  | Install (local)                         | gate                                            | Installs the built artifact into the local toolchain's cache/store for other local projects to consume — Maven's `install`.                                 |
+| 20  | Publish                                 | gate, **dry-run by default**                    | See §10.                                                                                                                                                    |
+| 21  | Deploy                                  | gate, **prepared-not-executed by default**      | See §10.                                                                                                                                                    |
+| 22  | Site                                    | report                                          | Separate from the phases above, same as Maven's separate Site lifecycle — see §8.                                                                           |
 
 ## 3. Branching and CI gating
 
@@ -429,7 +429,7 @@ concrete, working answer to
 "how do you actually satisfy rule N" without having to read the source.
 
 | Requirement                                       | npm implementation                                                                                                                                                                                                                                                                                                                 |
-|---------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | §2 phases                                         | `package.json` `scripts` block, one entry per phase, `tools/*.js` doing the actual work, `tools/run-workspaces.js` fanning a phase out across all modules in topological order                                                                                                                                                     |
 | §3 branch gating, pipeline shape (§3.7-3.10)      | `Jenkinsfile` (Jenkins declarative `when`/`expression`, `Inspection`/`Preparation`/`Build`/.../`Tag` stages, `post { always {} success {} failure {} }`) and `.github/workflows/ci.yml` (`if:` on `github.ref_name`, matching jobs, `notify` job)                                                                                  |
 | §3.11 local CI emulation                          | `ci-local/{feature,devel,release,master}-branch.sh` + `ci-local/run.sh` dispatcher + `ci-local/lib.sh` shared stages — POSIX `sh`, branch-gating logic read directly off `Jenkinsfile`'s `when` conditions                                                                                                                         |

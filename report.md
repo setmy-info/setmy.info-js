@@ -172,13 +172,13 @@ item below, including a combined run of all of them together):
   enforcing ADR-0042's "reviews must reject non-canonical profile names." Worked example:
   `packages/a/resources/config.json`. Read ADR-0041/ADR-0042 first, as asked, before designing this. 6 tests in
   `tools/test/resources.test.js`.
-    - Resolved the naming mismatch this surfaced: `DEPLOY_TARGET`/env flags in both CI files used `testing`, not
-      ADR-0041's canonical `test` — renamed throughout (`DEVELOPMENT_TO_TEST`/`RELEASE_TO_TEST`,
-      `deploy-test` job/stage). `local` and `ci` deliberately have no Deploy target (you don't deploy _to_ a dev machine
-      or _to_ the build environment) — noted, not "fixed," since that's correct as-is.
-    - The `-Pe2e`-vs-ADR-0042 tension noted last round is still open — it's a real ambiguity in the ADRs themselves (is
-      a build-behavior-switching profile "allowed" or not), not something to resolve unilaterally by editing someone
-      else's accepted ADR.
+  - Resolved the naming mismatch this surfaced: `DEPLOY_TARGET`/env flags in both CI files used `testing`, not
+    ADR-0041's canonical `test` — renamed throughout (`DEVELOPMENT_TO_TEST`/`RELEASE_TO_TEST`,
+    `deploy-test` job/stage). `local` and `ci` deliberately have no Deploy target (you don't deploy _to_ a dev machine
+    or _to_ the build environment) — noted, not "fixed," since that's correct as-is.
+  - The `-Pe2e`-vs-ADR-0042 tension noted last round is still open — it's a real ambiguity in the ADRs themselves (is
+    a build-behavior-switching profile "allowed" or not), not something to resolve unilaterally by editing someone
+    else's accepted ADR.
 - **Running-instance pattern extended to `b`/`c`/`d`.** Each now has its own `config.server` port, `web/index.html`, the
   four hook files, and
   `test/e2e/server.e2e.test.js` — same pattern as `a`, verified with all four servers running (and stopping) on distinct
@@ -416,7 +416,7 @@ regardless of what's in its `parallel {}` block. The bug was specific to the Git
     correctly had
     `needs: [build, publish-complete]`, but `deploy-test`,
     `deploy-prelive`, and `deploy-live` all had only `needs: build` — the comment directly above them already claimed "`needs: [build,
-    publish-complete]` on every job below," so this was a partial fix that never got finished, not a deliberate choice.
+publish-complete]` on every job below," so this was a partial fix that never got finished, not a deliberate choice.
     Net effect: on
     `devel*`/`release*`/`master` pushes, GitHub Actions' job scheduler could start `deploy-test`/`deploy-prelive`/
     `deploy-live` as soon as
@@ -425,7 +425,7 @@ regardless of what's in its `parallel {}` block. The bug was specific to the Git
     `snapshot-reports` — the opposite of the Jenkinsfile's guarantee that the whole Publish stage completes before
     Deploy starts. Fixed by adding `publish-complete` to all three jobs' `needs:`, matching
     `deploy-dev`. Verified the resulting YAML parses (`js-yaml`) and all four `deploy-*` jobs now show identical `needs: [build,
-    publish-complete]`.
+publish-complete]`.
     - `ci-local/*.sh` checked too: no equivalent bug possible there, since a POSIX shell script calls `stage_publish`
       then `stage_deploy` in written order — there's no scheduler to race the two stages. No changes made.
     - New rule added, `requirements-rules.md` §3.12: any DAG-based CI tool (job graph, not Jenkins-style sequential
