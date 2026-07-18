@@ -243,7 +243,8 @@ jobs:
   publish-complete:
     name: Publish / complete
     if: always()
-    needs: [release-publish, snapshot-publish, release-reports, snapshot-reports]
+    needs:
+      [release-publish, snapshot-publish, release-reports, snapshot-reports]
     runs-on: ubuntu-latest
     steps:
       - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
