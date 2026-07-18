@@ -393,9 +393,9 @@ number and I'll implement it.
     and the
     `@demo/*` scope. The real naming/scope decision has to land before real code moves in, because every module rename
     after that is a breaking change for consumers. Extends backlog 14.
-25. **`ci.yml` double-builds in-repo pull requests** — `on: push:
-branches: ["**"]` plus `on: pull_request` runs the pipeline twice for every PR whose head branch lives in the same repo.
-    Add a concurrency group or restrict one of the two triggers.
+25. ~~**`ci.yml` double-builds in-repo pull requests**~~ — **Resolved in Round 6**: the `pull_request` trigger was
+    removed outright (see Round 6 below) rather than deduplicated with a concurrency group, since it was pure
+    duplication of what `push: branches: ["**"]` already ran.
 26. **`ci-local/` is POSIX-shell-only** — on Windows the emulation scripts need Git Bash/WSL; nothing says so. Either
     document that constraint in README or add PowerShell equivalents if Windows-native developers are expected.
 27. **A demo changeset is pending** —
@@ -473,3 +473,48 @@ github.ref_name)` — `github.head_ref` is set only on `pull_request`
     - `Jenkinsfile` needed no change: Jenkins' multibranch `BRANCH_NAME`
       already reflects the real source branch regardless of how the build
       was triggered, so this class of bug can't occur there.
+
+**Follow-up, same date**: after the `head_ref || ref_name` fix above landed
+(committed and pushed — verified `HEAD` matched `origin/develop`), a fresh
+push to `develop` still showed Deploy/dev and Deploy/test skipped in
+GitHub Actions. Every static check available (reading the committed YAML,
+validating it parses, walking GitHub Actions' documented default
+job-gating semantics by hand) said this should already work — but static
+analysis without access to the actual run's logs couldn't get further, and
+guessing wrong again wasn't an acceptable next step. Rather than keep
+patching around the `push`/`pull_request` dual-trigger ambiguity (which
+requires correctly resolving branch name for *two* different event
+context shapes, is easy to get subtly wrong, and had already been gotten
+wrong once), escalated to removing the ambiguity's source entirely:
+
+30. **`pull_request` trigger removed from `ci.yml` outright**, not just
+    branch-name-patched. `push: branches: ["**"]` alone already satisfies
+    rule 3.2 (every branch runs Inspection-through-Package) for a
+    feature/PR branch, so `pull_request` was never load-bearing — it only
+    added the double-build (backlog item 25, now resolved) and was the
+    root cause of finding 29 above. With `push` as the only trigger,
+    `github.ref_name` is unambiguously the real branch on every run, full
+    stop — reverted the `github.head_ref || github.ref_name` fallback
+    back to bare `github.ref_name` everywhere, since it's dead weight once
+    there's only one trigger to disambiguate.
+31. **`deploy-dev`/`deploy-test`/`deploy-prelive`/`deploy-live`/`tag`'s
+    `if:` conditions now spell out `needs.<job>.result == 'success'` for
+    each of their direct `needs` explicitly**, instead of resting solely
+    on GitHub Actions' implicit default job-gating (a job whose own `if:`
+    doesn't call a status-check function is *also* implicitly required to
+    have every direct `needs` job succeed). That implicit rule is
+    documented and was already believed correct — this change doesn't
+    contradict it — but for the one guarantee that must never silently
+    regress (Publish finishing before Deploy starts), spelling it out
+    removes any dependency on that belief being right, and makes the
+    guarantee visible to a future reviewer instead of implicit.
+    - New rules added: `requirements-rules.md` §3.13 (prefer one trigger
+      over several redundant ones), §3.14 (a ref-derived branch-name check
+      must not assume the ref means the same thing across every trigger
+      type — superseded by §3.13 here, but kept as a rule for a project
+      that has a real reason to keep multiple triggers), §3.15 (spell out
+      `needs.<job>.result` explicitly for a DAG ordering guarantee that
+      must not regress, rather than resting on implicit default gating).
+    - Still unverified against a real GitHub Actions run at time of
+      writing (no `gh` CLI / live log access from this session) — the
+      next real push to `develop` is the actual confirmation.

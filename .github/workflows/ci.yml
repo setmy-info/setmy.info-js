@@ -2,35 +2,30 @@
 # stage names, same npm lifecycle commands, same master/devel*/release*
 # branch-gated Publish/Deploy pattern with the same *_TO_* deploy flags.
 # Jenkins parallel stages -> parallel jobs; Jenkins `when`/`expression`
-# branch gates -> `if:` conditions on the branch name.
+# branch gates -> `if:` conditions on `github.ref_name`.
 #
 # Feature branches (anything not master/devel*/release*) run Inspection
 # through Package - full build/lint/test/quality feedback - but never reach
 # Publish/Deploy/Tag, matching the Jenkinsfile.
 #
-# Branch name resolution: every branch-name check below uses
-# `github.head_ref || github.ref_name`, not bare `github.ref_name`. On a
-# `push` event `github.ref_name` is the real branch (e.g. `develop`) and
-# `github.head_ref` is empty, so the `||` falls through correctly. On a
-# `pull_request` event `github.ref` points at the synthetic
-# `refs/pull/<N>/merge` ref, so `github.ref_name` alone would resolve to
-# something like `"12/merge"` - never matching `devel*`/`release*`/`master`
-# - silently skipping Publish/Deploy/Tag on every PR-triggered run even
-# though the PR's actual source branch matches one of those patterns.
-# `github.head_ref` is only set on pull_request events and holds that real
-# source branch name, which is what Jenkins' BRANCH_NAME reflects
-# regardless of how the build was triggered - this keeps the two in parity.
-# (This repo also runs `on: push` for every branch AND `on: pull_request`,
-# so an in-repo PR's branch is built twice for the same commit - see
-# report.md backlog #25 - but with this fix both runs now resolve the
-# branch name correctly instead of only one of them.)
+# Trigger: `push` only, not `pull_request`. `push: branches: ["**"]`
+# already runs full CI (Inspection through Package) on every branch,
+# including a feature branch backing an open PR, matching rule 3.2 - a
+# `pull_request` trigger added nothing but a second, redundant run of the
+# same commit (report.md backlog #25), and worse, on a `pull_request` event
+# `github.ref_name` resolves to the synthetic `refs/pull/<N>/merge` ref
+# instead of the real branch name, silently failing every branch-name
+# check below (Publish/Deploy/Tag) on that second run. Removing the
+# trigger removes the whole failure mode at once, rather than working
+# around it: with `push` as the only trigger, `github.ref_name` is always
+# the real branch (e.g. `develop`), full stop, matching what Jenkins'
+# BRANCH_NAME already gives for free regardless of how the build started.
 
 name: CI
 
 on:
   push:
     branches: ["**"]
-  pull_request:
 
 env:
   MASTER_TO_LIVE: DEPLOY
@@ -177,7 +172,7 @@ jobs:
   release-publish:
     name: Publish / Release
     needs: build
-    if: (github.head_ref || github.ref_name) == 'master'
+    if: github.ref_name == 'master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -188,12 +183,12 @@ jobs:
       - run: npm run bootstrap
       - run: npm run publish
         env:
-          CI_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          CI_BRANCH_NAME: ${{ github.ref_name }}
 
   snapshot-publish:
     name: Publish / Snapshot
     needs: build
-    if: startsWith((github.head_ref || github.ref_name), 'devel')
+    if: startsWith(github.ref_name, 'devel')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -204,7 +199,7 @@ jobs:
       - run: npm run bootstrap
       - run: npm run publish
         env:
-          CI_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+          CI_BRANCH_NAME: ${{ github.ref_name }}
 
   # Real `mvn site-deploy` equivalent: publishes the site/ artifact built by
   # the primary matrix leg to GitHub Pages. Only wired for master (one Pages
@@ -216,7 +211,7 @@ jobs:
   release-reports:
     name: Publish / Release reports
     needs: build
-    if: (github.head_ref || github.ref_name) == 'master'
+    if: github.ref_name == 'master'
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -239,7 +234,7 @@ jobs:
   snapshot-reports:
     name: Publish / Snapshot reports
     needs: build
-    if: startsWith((github.head_ref || github.ref_name), 'devel')
+    if: startsWith(github.ref_name, 'devel')
     runs-on: ubuntu-latest
     steps:
       - run: echo 'Put here reports publishing steps (deploy site/ output) - a real target would need a per-branch preview path, GitHub Pages only serves one site'
@@ -277,15 +272,24 @@ jobs:
   # silently evaluates to false and the job never runs. The branch gate
   # (github context) stays at job level, matching the Jenkinsfile's `when`.
   #
-  # needs: [build, publish-complete] on every job below is what actually
-  # enforces Publish-before-Deploy ordering (see publish-complete above).
+  # Every job below spells out `needs.build.result == 'success' &&
+  # needs.publish-complete.result == 'success'` in its own `if:`, instead
+  # of leaving that to GitHub's implicit default job-gating (a job with a
+  # custom `if:` that doesn't call success()/always()/failure()/cancelled()
+  # is *also* implicitly required to have every direct `needs` job
+  # succeed - correct, but not something worth relying on silently for the
+  # one thing that must never regress: Publish finishing before Deploy
+  # starts). Being explicit here means a future edit to this file can't
+  # accidentally break that guarantee by adding an always()/failure() to
+  # one of these `if:` conditions without a reviewer noticing the ordering
+  # implication.
 
   deploy-dev:
     name: Deploy / dev
     needs: [build, publish-complete]
     if: >
-      startsWith((github.head_ref || github.ref_name), 'devel') ||
-      startsWith((github.head_ref || github.ref_name), 'release')
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      (startsWith(github.ref_name, 'devel') || startsWith(github.ref_name, 'release'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -295,8 +299,8 @@ jobs:
           cache: npm
       - run: npm run bootstrap
       - if: >
-          env.DEVELOPMENT_TO_DEV == 'DEPLOY' && startsWith((github.head_ref || github.ref_name), 'devel') ||
-          env.RELEASE_TO_DEV == 'DEPLOY' && startsWith((github.head_ref || github.ref_name), 'release')
+          env.DEVELOPMENT_TO_DEV == 'DEPLOY' && startsWith(github.ref_name, 'devel') ||
+          env.RELEASE_TO_DEV == 'DEPLOY' && startsWith(github.ref_name, 'release')
         run: npm run deploy
         env:
           DEPLOY_TARGET: dev
@@ -305,8 +309,8 @@ jobs:
     name: Deploy / test
     needs: [build, publish-complete]
     if: >
-      startsWith((github.head_ref || github.ref_name), 'devel') ||
-      startsWith((github.head_ref || github.ref_name), 'release')
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      (startsWith(github.ref_name, 'devel') || startsWith(github.ref_name, 'release'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -316,8 +320,8 @@ jobs:
           cache: npm
       - run: npm run bootstrap
       - if: >
-          env.DEVELOPMENT_TO_TEST == 'DEPLOY' && startsWith((github.head_ref || github.ref_name), 'devel') ||
-          env.RELEASE_TO_TEST == 'DEPLOY' && startsWith((github.head_ref || github.ref_name), 'release')
+          env.DEVELOPMENT_TO_TEST == 'DEPLOY' && startsWith(github.ref_name, 'devel') ||
+          env.RELEASE_TO_TEST == 'DEPLOY' && startsWith(github.ref_name, 'release')
         run: npm run deploy
         env:
           DEPLOY_TARGET: test
@@ -325,7 +329,9 @@ jobs:
   deploy-prelive:
     name: Deploy / prelive
     needs: [build, publish-complete]
-    if: startsWith((github.head_ref || github.ref_name), 'release')
+    if: >
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      startsWith(github.ref_name, 'release')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -342,7 +348,9 @@ jobs:
   deploy-live:
     name: Deploy / live
     needs: [build, publish-complete]
-    if: (github.head_ref || github.ref_name) == 'master'
+    if: >
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      github.ref_name == 'master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -362,8 +370,14 @@ jobs:
     name: Tag
     needs: [release-publish, deploy-live]
     # Same env-context limitation as the Deploy jobs above: the
-    # MASTER_TO_LIVE flag check lives on the step, not the job `if:`.
-    if: (github.head_ref || github.ref_name) == 'master'
+    # MASTER_TO_LIVE flag check lives on the step, not the job `if:`. Same
+    # explicit-needs-result reasoning as the Deploy jobs above too -
+    # release-publish is legitimately skipped on non-master branches, but
+    # this job's own `if:` already restricts it to master, where
+    # release-publish always runs for real.
+    if: >
+      needs.release-publish.result == 'success' && needs.deploy-live.result == 'success' &&
+      github.ref_name == 'master'
     runs-on: ubuntu-latest
     steps:
       - if: env.MASTER_TO_LIVE == 'DEPLOY'

@@ -79,7 +79,7 @@ Jenkins parallel stages become parallel jobs (`pre-build`/`build-tools` for Insp
 `snapshot-publish`/`release-reports`/
 `snapshot-reports` for Publish; `deploy-dev`/`deploy-test`/
 `deploy-prelive`/`deploy-live` for Deploy), Jenkins `when`/`expression`
-branch gates become `if:` conditions on `github.head_ref || github.ref_name` (see below for why it's not bare `github.ref_name`), and the
+branch gates become `if:` conditions on `github.ref_name`, and the
 `post-integration-test`/`post-e2e-test` cleanup steps use `if: always()`
 for the same guarantee. A final `notify` job (`if: always()`, depends on every other job) stands in for the
 Jenkinsfile's `post { success / failure
@@ -89,17 +89,19 @@ Jenkins' declarative stages are strictly sequential no matter what runs in paral
 stage always finishes before Deploy starts — GitHub Actions has no such guarantee (a job starts the moment its own
 `needs:` are satisfied), so `ci.yml` adds a `publish-complete`
 barrier job (`needs:` all four Publish jobs, `if: always()` so it still runs when branch-gating skips some of them,
-fails if any of them actually failed) and every `deploy-*` job depends on it alongside `build`. See
-`requirements-rules.md` §3.12.
+fails if any of them actually failed) and every `deploy-*` job depends on it alongside `build`. Each of those `deploy-*`
+jobs (and `tag`) also spells out `needs.build.result == 'success' && needs.publish-complete.result == 'success'`
+directly in its own `if:`, rather than leaning only on GitHub's implicit default job-gating for something this
+important — see `requirements-rules.md` §3.12 and §3.15.
 
-This file also triggers on both `push` (every branch) and `pull_request`, and those two event types don't mean the
-same thing by `github.ref_name`: on `push` it's the real branch (e.g. `develop`), but on `pull_request` GitHub points
-`github.ref` at the synthetic `refs/pull/<N>/merge` ref, so bare `github.ref_name` becomes something like `"12/merge"`
-— never matching `devel*`/`release*`/`master`, silently skipping Publish/Deploy/Tag on that run even though the PR's
-real source branch matches. Every branch-gating `if:` here uses `github.head_ref || github.ref_name` instead —
-`head_ref` is set only on `pull_request` events and holds the real source branch — so both trigger types resolve the
-branch correctly. See `requirements-rules.md` §3.13. (The two triggers still mean an in-repo PR's branch builds twice
-for the same commit — that part is unfixed, tracked in `report.md` backlog item 25.)
+This file triggers on `push` only — no `pull_request`. `push: branches: ["**"]` already runs full CI on every branch,
+including whatever branch is backing an open PR, so a `pull_request` trigger never added coverage, only a redundant
+second run of the same commit (`report.md` backlog item 25). It also actively broke branch-gating: on a
+`pull_request` event GitHub points `github.ref` at the synthetic `refs/pull/<N>/merge` ref, so `github.ref_name`
+resolves to something like `"12/merge"` there — never matching `devel*`/`release*`/`master` — silently skipping
+Publish/Deploy/Tag on that second run even though the PR's real source branch matched. Removing the trigger removes
+the failure mode outright: with `push` as the only trigger, `github.ref_name` is always the real branch. See
+`requirements-rules.md` §3.13-§3.14.
 
 ### Emulating CI locally, without Jenkins
 

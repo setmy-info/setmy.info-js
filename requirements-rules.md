@@ -174,17 +174,38 @@ found in this repo's own `ci.yml` —
 `release*`/`master` those three Deploy jobs could run before Publish finished. See `report.md` for the fix. A CI tool
 with genuine sequential stages, Jenkins included, gets this ordering for free and needs no equivalent mechanism.)
 
-3.13. **A CI tool whose branch-gating condition is derived from a triggering-event ref (e.g. GitHub Actions'
-`github.ref_name`) MUST resolve the real source branch name correctly across every event type the pipeline triggers on,
-not just the most common one.** A pipeline definition that triggers on more than one event type (e.g. both `push` and
-`pull_request`) MUST NOT assume the ref-derived branch name means the same thing for every trigger — on GitHub Actions
-specifically, `github.ref_name` is the real branch on a `push` event but resolves to a synthetic merge-ref identifier
-(e.g. `"12/merge"`) on a `pull_request` event, so a bare `github.ref_name` check silently never matches
-`devel*`/`release*`/`master` on that trigger, skipping Publish/Deploy/Tag even though the PR's actual source branch
-matches. (Origin: found in this repo's own `ci.yml` — every branch-gating `if:` used bare `github.ref_name`; fixed to
-`github.head_ref || github.ref_name`, since `github.head_ref` is set only on `pull_request` events and holds the real
-source branch. See `report.md` Round 6 for the fix. Jenkins' multibranch `BRANCH_NAME` already reflects the real
-source branch regardless of trigger, so this class of bug can't occur there.)
+3.13. **A pipeline definition SHOULD trigger on exactly one event type per push, not several that fire redundantly for
+the same commit.** Adding a second trigger "just in case" (e.g. GitHub Actions' `pull_request` alongside `push:
+branches: ["**"]`, when the latter already runs full CI on every branch including a PR's source branch) doesn't add
+coverage, it adds a second run of the same commit to reconcile — and if the two event types don't resolve
+triggering-event context identically (see rule 3.14), it adds a live failure mode, not just waste. Prefer the single
+trigger that already satisfies the branch-gating requirements over adding a second one for a case the first already
+covers. (Origin: this repo's own `ci.yml` triggered on both `push` and `pull_request`; the `pull_request` trigger was
+removed rather than patched, both because it was pure duplication of what `push: branches: ["**"]` already ran, and
+because it was the direct cause of rule 3.14's bug below. See `report.md` Round 6.)
+
+3.14. **A CI tool whose branch-gating condition is derived from a triggering-event ref (e.g. GitHub Actions'
+`github.ref_name`) MUST NOT assume that ref resolves to the real source branch name for every event type the pipeline
+could trigger on.** On GitHub Actions specifically, `github.ref_name` is the real branch on a `push` event but
+resolves to a synthetic merge-ref identifier (e.g. `"12/merge"`) on a `pull_request` event, so a bare `github.ref_name`
+check silently never matches `devel*`/`release*`/`master` on that trigger, skipping Publish/Deploy/Tag even though the
+PR's actual source branch matches. Resolving this correctly (e.g. `github.head_ref || github.ref_name`) is one valid
+fix, but eliminating the second trigger entirely (rule 3.13) is the more robust one: it removes the ambiguity instead
+of computing around it. (Origin: found in this repo's own `ci.yml` — every branch-gating `if:` used bare
+`github.ref_name`; the `pull_request` trigger was removed instead, so `github.ref_name` is now unambiguous. See
+`report.md` Round 6. Jenkins' multibranch `BRANCH_NAME` already reflects the real source branch regardless of
+trigger, so this class of bug can't occur there.)
+
+3.15. **A CI tool's DAG-scheduled job MUST NOT rely on a scheduler's implicit default gating (e.g. GitHub Actions'
+"a job with a custom `if:` that doesn't call a status-check function is also implicitly required to have every direct
+`needs` job succeed") for an ordering guarantee that must never silently regress — spell the dependency out in the
+`if:` condition itself (e.g. `needs.<job>.result == 'success'`).** The implicit behavior is real and correct, but it's
+easy for a future edit to break by accident (e.g. adding `always()`/`failure()` to that same `if:` for an unrelated
+reason strips the implicit gating without the editor necessarily realizing it was ever there). This costs nothing
+extra to write out and turns a silent regression into a change a reviewer can actually see. (Origin: this repo's
+`ci.yml` Deploy jobs and Tag now spell out `needs.build.result == 'success' && needs.publish-complete.result ==
+'success'` etc. explicitly rather than leaning on the implicit rule alone — added as a defensive hardening pass
+alongside rules 3.13-3.14, not because the implicit rule was proven wrong. See `report.md` Round 6.)
 
 ## 4. Environments and profiles (ADR-0041 / ADR-0042)
 
@@ -443,10 +464,12 @@ concrete, working answer to
 | Requirement                                       | npm implementation                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | §2 phases                                         | `package.json` `scripts` block, one entry per phase, `tools/*.js` doing the actual work, `tools/run-workspaces.js` fanning a phase out across all modules in topological order                                                                                                                                                     |
-| §3 branch gating, pipeline shape (§3.7-3.10)      | `Jenkinsfile` (Jenkins declarative `when`/`expression`, `Inspection`/`Preparation`/`Build`/.../`Tag` stages, `post { always {} success {} failure {} }`) and `.github/workflows/ci.yml` (`if:` on `github.head_ref \|\| github.ref_name`, matching jobs, `notify` job)                                                             |
+| §3 branch gating, pipeline shape (§3.7-3.10)      | `Jenkinsfile` (Jenkins declarative `when`/`expression`, `Inspection`/`Preparation`/`Build`/.../`Tag` stages, `post { always {} success {} failure {} }`) and `.github/workflows/ci.yml` (`if:` on `github.ref_name`, matching jobs, `notify` job)                                                                                   |
 | §3.11 local CI emulation                          | `ci-local/{feature,devel,release,master}-branch.sh` + `ci-local/run.sh` dispatcher + `ci-local/lib.sh` shared stages — POSIX `sh`, branch-gating logic read directly off `Jenkinsfile`'s `when` conditions                                                                                                                         |
 | §3.12 Publish-before-Deploy barrier (DAG CI only) | `ci.yml`'s `publish-complete` job (`needs:` all four Publish jobs, `if: always()`, fails on any real Publish failure) in every `deploy-*` job's `needs:` — not needed in `Jenkinsfile`, which gets the ordering for free from Jenkins' sequential stages                                                                           |
-| §3.13 branch-name resolution across trigger types | `ci.yml`'s every branch-gating `if:` uses `github.head_ref \|\| github.ref_name`, not bare `github.ref_name` — not needed in `Jenkinsfile`, whose multibranch `BRANCH_NAME` already reflects the real source branch regardless of trigger                                                                                          |
+| §3.13 one trigger, not several redundant ones     | `ci.yml` triggers on `push: branches: ["**"]` only, no `pull_request` — not applicable to `Jenkinsfile`, which has no separate PR-vs-push trigger concept                                                                                                                                                                          |
+| §3.14 branch-name resolution across trigger types | N/A now that `ci.yml` has only one trigger type — `github.ref_name` is always the real branch; not needed in `Jenkinsfile` either, whose multibranch `BRANCH_NAME` already reflects the real source branch regardless of trigger                                                                                                  |
+| §3.15 explicit needs-result checks (DAG CI only)  | `ci.yml`'s `deploy-*`/`tag` jobs spell out `needs.build.result == 'success' && needs.publish-complete.result == 'success' && ...` in their `if:`, instead of relying only on GitHub Actions' implicit default job-gating — not needed in `Jenkinsfile`, whose sequential stages have no equivalent implicit-gating subtlety to guard against                                                                                          |
 | §4 profiles                                       | `tools/profile-utils.js` (`CANONICAL_PROFILES`, hard-validated), `profiles/<name>.json` (flat JSON object, not `.properties` — see §6.3)                                                                                                                                                                                           |
 | §5 modules                                        | npm workspaces (`packages/*`), `tools/workspace-utils.js`                                                                                                                                                                                                                                                                          |
 | §6 resources                                      | `tools/resources.js`, `${propertyName}` regex substitution                                                                                                                                                                                                                                                                         |
