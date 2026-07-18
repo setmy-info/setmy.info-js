@@ -79,7 +79,7 @@ Jenkins parallel stages become parallel jobs (`pre-build`/`build-tools` for Insp
 `snapshot-publish`/`release-reports`/
 `snapshot-reports` for Publish; `deploy-dev`/`deploy-test`/
 `deploy-prelive`/`deploy-live` for Deploy), Jenkins `when`/`expression`
-branch gates become `if:` conditions on `github.ref_name`, and the
+branch gates become `if:` conditions on `github.head_ref || github.ref_name` (see below for why it's not bare `github.ref_name`), and the
 `post-integration-test`/`post-e2e-test` cleanup steps use `if: always()`
 for the same guarantee. A final `notify` job (`if: always()`, depends on every other job) stands in for the
 Jenkinsfile's `post { success / failure
@@ -91,6 +91,15 @@ stage always finishes before Deploy starts — GitHub Actions has no such guaran
 barrier job (`needs:` all four Publish jobs, `if: always()` so it still runs when branch-gating skips some of them,
 fails if any of them actually failed) and every `deploy-*` job depends on it alongside `build`. See
 `requirements-rules.md` §3.12.
+
+This file also triggers on both `push` (every branch) and `pull_request`, and those two event types don't mean the
+same thing by `github.ref_name`: on `push` it's the real branch (e.g. `develop`), but on `pull_request` GitHub points
+`github.ref` at the synthetic `refs/pull/<N>/merge` ref, so bare `github.ref_name` becomes something like `"12/merge"`
+— never matching `devel*`/`release*`/`master`, silently skipping Publish/Deploy/Tag on that run even though the PR's
+real source branch matches. Every branch-gating `if:` here uses `github.head_ref || github.ref_name` instead —
+`head_ref` is set only on `pull_request` events and holds the real source branch — so both trigger types resolve the
+branch correctly. See `requirements-rules.md` §3.13. (The two triggers still mean an in-repo PR's branch builds twice
+for the same commit — that part is unfixed, tracked in `report.md` backlog item 25.)
 
 ### Emulating CI locally, without Jenkins
 

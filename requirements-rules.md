@@ -174,6 +174,18 @@ found in this repo's own `ci.yml` —
 `release*`/`master` those three Deploy jobs could run before Publish finished. See `report.md` for the fix. A CI tool
 with genuine sequential stages, Jenkins included, gets this ordering for free and needs no equivalent mechanism.)
 
+3.13. **A CI tool whose branch-gating condition is derived from a triggering-event ref (e.g. GitHub Actions'
+`github.ref_name`) MUST resolve the real source branch name correctly across every event type the pipeline triggers on,
+not just the most common one.** A pipeline definition that triggers on more than one event type (e.g. both `push` and
+`pull_request`) MUST NOT assume the ref-derived branch name means the same thing for every trigger — on GitHub Actions
+specifically, `github.ref_name` is the real branch on a `push` event but resolves to a synthetic merge-ref identifier
+(e.g. `"12/merge"`) on a `pull_request` event, so a bare `github.ref_name` check silently never matches
+`devel*`/`release*`/`master` on that trigger, skipping Publish/Deploy/Tag even though the PR's actual source branch
+matches. (Origin: found in this repo's own `ci.yml` — every branch-gating `if:` used bare `github.ref_name`; fixed to
+`github.head_ref || github.ref_name`, since `github.head_ref` is set only on `pull_request` events and holds the real
+source branch. See `report.md` Round 6 for the fix. Jenkins' multibranch `BRANCH_NAME` already reflects the real
+source branch regardless of trigger, so this class of bug can't occur there.)
+
 ## 4. Environments and profiles (ADR-0041 / ADR-0042)
 
 4.1. The only valid environment/profile names, anywhere in this system — build-time profiles, runtime profiles, deploy
@@ -431,9 +443,10 @@ concrete, working answer to
 | Requirement                                       | npm implementation                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | §2 phases                                         | `package.json` `scripts` block, one entry per phase, `tools/*.js` doing the actual work, `tools/run-workspaces.js` fanning a phase out across all modules in topological order                                                                                                                                                     |
-| §3 branch gating, pipeline shape (§3.7-3.10)      | `Jenkinsfile` (Jenkins declarative `when`/`expression`, `Inspection`/`Preparation`/`Build`/.../`Tag` stages, `post { always {} success {} failure {} }`) and `.github/workflows/ci.yml` (`if:` on `github.ref_name`, matching jobs, `notify` job)                                                                                  |
+| §3 branch gating, pipeline shape (§3.7-3.10)      | `Jenkinsfile` (Jenkins declarative `when`/`expression`, `Inspection`/`Preparation`/`Build`/.../`Tag` stages, `post { always {} success {} failure {} }`) and `.github/workflows/ci.yml` (`if:` on `github.head_ref \|\| github.ref_name`, matching jobs, `notify` job)                                                             |
 | §3.11 local CI emulation                          | `ci-local/{feature,devel,release,master}-branch.sh` + `ci-local/run.sh` dispatcher + `ci-local/lib.sh` shared stages — POSIX `sh`, branch-gating logic read directly off `Jenkinsfile`'s `when` conditions                                                                                                                         |
 | §3.12 Publish-before-Deploy barrier (DAG CI only) | `ci.yml`'s `publish-complete` job (`needs:` all four Publish jobs, `if: always()`, fails on any real Publish failure) in every `deploy-*` job's `needs:` — not needed in `Jenkinsfile`, which gets the ordering for free from Jenkins' sequential stages                                                                           |
+| §3.13 branch-name resolution across trigger types | `ci.yml`'s every branch-gating `if:` uses `github.head_ref \|\| github.ref_name`, not bare `github.ref_name` — not needed in `Jenkinsfile`, whose multibranch `BRANCH_NAME` already reflects the real source branch regardless of trigger                                                                                         |
 | §4 profiles                                       | `tools/profile-utils.js` (`CANONICAL_PROFILES`, hard-validated), `profiles/<name>.json` (flat JSON object, not `.properties` — see §6.3)                                                                                                                                                                                           |
 | §5 modules                                        | npm workspaces (`packages/*`), `tools/workspace-utils.js`                                                                                                                                                                                                                                                                          |
 | §6 resources                                      | `tools/resources.js`, `${propertyName}` regex substitution                                                                                                                                                                                                                                                                         |

@@ -431,3 +431,45 @@ publish-complete]`.
     - New rule added, `requirements-rules.md` §3.12: any DAG-based CI tool (job graph, not Jenkins-style sequential
       stages) MUST give every Deploy job a dependency on a Publish-complete barrier job, precisely because a DAG
       scheduler has no concept of "the whole previous stage finished" the way Jenkins does for free.
+
+## Round 6: `ci.yml` silently skipped Deploy/Publish/Tag on pull_request-triggered runs
+
+Date: 2026-07-19
+
+Concrete trigger: a real Jenkins build of this repo's `Jenkinsfile` on the
+`develop` branch correctly ran Deploy/dev and Deploy/test, but the GitHub
+Actions run for the same branch showed both as skipped. Jenkinsfile logic
+was fine again — the bug was specific to how `ci.yml` resolves "what
+branch is this."
+
+29. **Fixed: every branch-name check in `ci.yml` used bare
+    `github.ref_name`, which resolves to the wrong value on
+    `pull_request`-triggered runs.** This file triggers on both `push:
+    branches: ["**"]` and `pull_request` (already flagged as a
+    double-build in backlog item 25), so an in-repo PR from `develop`
+    produces two runs for the same commit: a `push` run, where
+    `github.ref_name` really is `"develop"`, and a `pull_request` run,
+    where `github.ref` is the synthetic `refs/pull/<N>/merge` ref, so
+    `github.ref_name` is something like `"12/merge"` — never matching
+    `devel*`/`release*`/`master`. Every `startsWith(github.ref_name,
+    ...)`/`github.ref_name == 'master'` check (Publish's four jobs,
+    Deploy's four jobs' job- and step-level `if:`, Tag, and the
+    `CI_BRANCH_NAME` passed into `tools/publish.js`) silently evaluated
+    false on that second run, skipping Publish/Deploy/Tag even though the
+    PR's actual source branch matched. If a developer happened to look at
+    the PR's Checks tab (which surfaces the `pull_request`-triggered run),
+    they'd see Deploy/dev and Deploy/test skipped and reasonably conclude
+    CI was broken, even though the sibling `push`-triggered run for the
+    exact same commit ran them correctly. Fixed by replacing every
+    `github.ref_name` used for branch-gating with `(github.head_ref ||
+    github.ref_name)` — `github.head_ref` is set only on `pull_request`
+    events and holds the real source branch name, `github.ref_name` alone
+    is already correct on `push`, so the `||` resolves correctly for both
+    trigger types. Verified all 12 call sites were updated consistently
+    and the resulting YAML still parses (`js-yaml`).
+    - This does not fix the double-build itself (backlog item 25 stays
+      open) — both runs still happen for an in-repo PR — but both now
+      resolve the branch name correctly instead of only the `push` one.
+    - `Jenkinsfile` needed no change: Jenkins' multibranch `BRANCH_NAME`
+      already reflects the real source branch regardless of how the build
+      was triggered, so this class of bug can't occur there.
