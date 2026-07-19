@@ -1,14 +1,12 @@
 # SUPERSEDED — kept for history only
 
-This was the pre-planning scratch table this repo was built from. The
-maintained, corrected version of this table now lives in **ADR-0045**
+This was the pre-planning scratch table this repo was built from. The maintained, corrected version of this table now
+lives in **ADR-0045**
 (`setmy-info.github.io`,
-`src/site/markdown/it/architecture/decisions/adr-0045-software-build-lifecycles.md`),
-whose npm column was updated to reflect what is actually implemented here.
-This file is NOT updated anymore — read ADR-0045 and
-`requirements-rules.md` instead. Differences you may notice (e.g. the npm
-column showing scripts that were later renamed or added) are exactly why
-this copy should not be trusted.
+`src/site/markdown/it/architecture/decisions/adr-0045-software-build-lifecycles.md`), whose npm column was updated to
+reflect what is actually implemented here. This file is NOT updated anymore — read ADR-0045 and
+`requirements-rules.md` instead. Differences you may notice (e.g. the npm column showing scripts that were later renamed
+or added) are exactly why this copy should not be trusted.
 
 https://setmy-info.github.io/src/site/markdown/it/architecture/decisions/adr-0045-software-build-lifecycles.html
 

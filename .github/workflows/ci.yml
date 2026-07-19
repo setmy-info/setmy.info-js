@@ -2,18 +2,30 @@
 # stage names, same npm lifecycle commands, same master/devel*/release*
 # branch-gated Publish/Deploy pattern with the same *_TO_* deploy flags.
 # Jenkins parallel stages -> parallel jobs; Jenkins `when`/`expression`
-# branch gates -> `if:` conditions on github.ref_name.
+# branch gates -> `if:` conditions on `github.ref_name`.
 #
 # Feature branches (anything not master/devel*/release*) run Inspection
 # through Package - full build/lint/test/quality feedback - but never reach
 # Publish/Deploy/Tag, matching the Jenkinsfile.
+#
+# Trigger: `push` only, not `pull_request`. `push: branches: ["**"]`
+# already runs full CI (Inspection through Package) on every branch,
+# including a feature branch backing an open PR, matching rule 3.2 - a
+# `pull_request` trigger added nothing but a second, redundant run of the
+# same commit (report.md backlog #25), and worse, on a `pull_request` event
+# `github.ref_name` resolves to the synthetic `refs/pull/<N>/merge` ref
+# instead of the real branch name, silently failing every branch-name
+# check below (Publish/Deploy/Tag) on that second run. Removing the
+# trigger removes the whole failure mode at once, rather than working
+# around it: with `push` as the only trigger, `github.ref_name` is always
+# the real branch (e.g. `develop`), full stop, matching what Jenkins'
+# BRANCH_NAME already gives for free regardless of how the build started.
 
 name: CI
 
 on:
   push:
     branches: ["**"]
-  pull_request:
 
 env:
   MASTER_TO_LIVE: DEPLOY
@@ -260,15 +272,24 @@ jobs:
   # silently evaluates to false and the job never runs. The branch gate
   # (github context) stays at job level, matching the Jenkinsfile's `when`.
   #
-  # needs: [build, publish-complete] on every job below is what actually
-  # enforces Publish-before-Deploy ordering (see publish-complete above).
+  # Every job below spells out `needs.build.result == 'success' &&
+  # needs.publish-complete.result == 'success'` in its own `if:`, instead
+  # of leaving that to GitHub's implicit default job-gating (a job with a
+  # custom `if:` that doesn't call success()/always()/failure()/cancelled()
+  # is *also* implicitly required to have every direct `needs` job
+  # succeed - correct, but not something worth relying on silently for the
+  # one thing that must never regress: Publish finishing before Deploy
+  # starts). Being explicit here means a future edit to this file can't
+  # accidentally break that guarantee by adding an always()/failure() to
+  # one of these `if:` conditions without a reviewer noticing the ordering
+  # implication.
 
   deploy-dev:
     name: Deploy / dev
     needs: [build, publish-complete]
     if: >
-      startsWith(github.ref_name, 'devel') ||
-      startsWith(github.ref_name, 'release')
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      (startsWith(github.ref_name, 'devel') || startsWith(github.ref_name, 'release'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -286,10 +307,10 @@ jobs:
 
   deploy-test:
     name: Deploy / test
-    needs: build
+    needs: [build, publish-complete]
     if: >
-      startsWith(github.ref_name, 'devel') ||
-      startsWith(github.ref_name, 'release')
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      (startsWith(github.ref_name, 'devel') || startsWith(github.ref_name, 'release'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -307,8 +328,10 @@ jobs:
 
   deploy-prelive:
     name: Deploy / prelive
-    needs: build
-    if: startsWith(github.ref_name, 'release')
+    needs: [build, publish-complete]
+    if: >
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      startsWith(github.ref_name, 'release')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -324,8 +347,10 @@ jobs:
 
   deploy-live:
     name: Deploy / live
-    needs: build
-    if: github.ref_name == 'master'
+    needs: [build, publish-complete]
+    if: >
+      needs.build.result == 'success' && needs.publish-complete.result == 'success' &&
+      github.ref_name == 'master'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -345,8 +370,14 @@ jobs:
     name: Tag
     needs: [release-publish, deploy-live]
     # Same env-context limitation as the Deploy jobs above: the
-    # MASTER_TO_LIVE flag check lives on the step, not the job `if:`.
-    if: github.ref_name == 'master'
+    # MASTER_TO_LIVE flag check lives on the step, not the job `if:`. Same
+    # explicit-needs-result reasoning as the Deploy jobs above too -
+    # release-publish is legitimately skipped on non-master branches, but
+    # this job's own `if:` already restricts it to master, where
+    # release-publish always runs for real.
+    if: >
+      needs.release-publish.result == 'success' && needs.deploy-live.result == 'success' &&
+      github.ref_name == 'master'
     runs-on: ubuntu-latest
     steps:
       - if: env.MASTER_TO_LIVE == 'DEPLOY'
