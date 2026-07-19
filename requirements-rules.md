@@ -2,10 +2,14 @@
 
 Status: extracted from the working `setmy.info-js` implementation on 2026-07-17. This document is **language-agnostic on
 purpose**: it states what any language/toolchain implementation of this build system must do, not how the npm
-implementation happens to do it. Use it as the spec when building the Python (`setmy.info-python`?) or Elixir
-(`setmy.info-ex`?)
-sibling projects — read it instead of the npm source, and only look at
-`setmy.info-js` for a worked reference of one way to satisfy each rule.
+implementation happens to do it. `setmy.info-python` (plain `venv` + `pip`) is the second worked reference,
+built from this spec on 2026-07-19 — see its own `report.md` for what that build surfaced. `setmy.info-elixir` (Mix
+umbrella project) is the third worked reference, also built from this spec on 2026-07-19 — see its own `report.md`,
+which surfaced significantly more non-obvious platform constraints (Mix/umbrella task discovery, per-app vs
+root-level dependency visibility, Hex's structural refusal to package apps with in-umbrella deps) than either prior
+language did. Read this document instead of any existing implementation's source when building a new language
+sibling — only look at `setmy.info-js`/`setmy.info-python`/`setmy.info-elixir` for three different worked references
+of one way to satisfy each rule.
 
 Requirement keywords (`MUST`, `MUST NOT`, `SHOULD`, `MAY`) are used in the RFC 2119 sense: `MUST` is non-negotiable,
 `SHOULD` is a strong default you need a real reason to deviate from, `MAY` is a genuine option.
@@ -23,26 +27,26 @@ decisions:
   origin of the Inspection/Preparation/Build/.../Tag stage structure, the
   `<SOURCE>_TO_<TARGET>` deploy-flag naming, and the startup/inspection sanity-check pattern (§3.8) — read the file
   itself, not just this document's summary of it, before implementing §3 in a new language:
-  - Repo: `git@github.com:setmy-info/jenkinsfile-starter.git` /
-    `https://github.com/setmy-info/jenkinsfile-starter` (default branch:
-    `master`)
-  - Local checkout used for this work:
-    `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter`
-  - The template file itself:
-    `Jenkinsfile` at the repo root — local path
-    `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter/Jenkinsfile`, web URL
-    `https://github.com/setmy-info/jenkinsfile-starter/blob/master/Jenkinsfile`.
-    `src/Jenkinsfile.groovy` in the same repo is a symlink to the root
-    `Jenkinsfile` (same content by construction) — treat the root
-    `Jenkinsfile` as canonical.
-  - This template repo's own branches (`master`, `develop`,
-    `feature/something`, `release/1.0.0`) are themselves a working example of the exact branch model §3.1 requires.
-  - The npm implementation's own migrated copy — what §3.7-§3.10 actually look like once satisfied — is `Jenkinsfile`
-    at the root of
-    `setmy.info-js`: local path
-    `/home/has/sources/components/setmy.info/submodules/setmy.info-js/Jenkinsfile`, repo
-    `git@github.com:setmy-info/setmy.info-js.git` /
-    `https://github.com/setmy-info/setmy.info-js`.
+    - Repo: `git@github.com:setmy-info/jenkinsfile-starter.git` /
+      `https://github.com/setmy-info/jenkinsfile-starter` (default branch:
+      `master`)
+    - Local checkout used for this work:
+      `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter`
+    - The template file itself:
+      `Jenkinsfile` at the repo root — local path
+      `/home/has/sources/components/setmy.info/submodules/jenkinsfile-starter/Jenkinsfile`, web URL
+      `https://github.com/setmy-info/jenkinsfile-starter/blob/master/Jenkinsfile`.
+      `src/Jenkinsfile.groovy` in the same repo is a symlink to the root
+      `Jenkinsfile` (same content by construction) — treat the root
+      `Jenkinsfile` as canonical.
+    - This template repo's own branches (`master`, `develop`,
+      `feature/something`, `release/1.0.0`) are themselves a working example of the exact branch model §3.1 requires.
+    - The npm implementation's own migrated copy — what §3.7-§3.10 actually look like once satisfied — is `Jenkinsfile`
+      at the root of
+      `setmy.info-js`: local path
+      `/home/has/sources/components/setmy.info/submodules/setmy.info-js/Jenkinsfile`, repo
+      `git@github.com:setmy-info/setmy.info-js.git` /
+      `https://github.com/setmy-info/setmy.info-js`.
 
 ## 1. Core principle
 
@@ -263,9 +267,11 @@ solving a different, harder problem this doesn't need.
 6.3. Property values MUST come from a per-environment source keyed by exactly the ADR-0041 six names (§4.1), e.g. one
 config file per environment, in whatever format is most idiomatic for the ecosystem (the npm implementation uses one
 flat JSON object per environment — see §14 — specifically because JSON, not `.properties`, is the natural choice in the
-Node/JS/TS world; a Python implementation might reach for a `.toml`
-or `.json` file just as naturally, an Elixir one for a `.exs`/`.json`
-config — the _format_ is an ecosystem choice, the _one-file-per-canonical- environment_ structure is not). A module MAY
+Node/JS/TS world; the Python implementation uses one YAML file per environment instead — not JSON, matching the real
+precedent in this org's own existing Python repos (`python-commons` ships a dedicated PyYAML dependency and a `yaml/`
+module; `python-start-project`'s own environment config is `application.yaml`/`application-dev.yaml`) rather than
+guessing at a format in isolation; an Elixir one might reach for `.exs`/`.json` — the _format_ is an ecosystem choice,
+the _one-file-per-canonical-environment_ structure is not). A module MAY
 override/extend the shared values with its own per-module, per-environment values — shared value wins only where the
 module doesn't override it (later/more-specific source wins per key, not per file).
 
