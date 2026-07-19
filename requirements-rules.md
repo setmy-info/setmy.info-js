@@ -134,8 +134,9 @@ npm-specific nicety, and was previously missing from this document even though t
 `Jenkinsfile`/`ci.yml` both already do it.)
 
 3.9. The pipeline definition SHOULD group phases into named stages mirroring this shape (stage _names_ MAY differ per CI
-tool's conventions, the _structure_ MUST hold, and this is the structure both the npm
-`Jenkinsfile` and `ci.yml` actually use): Inspection (§3.8, run in parallel with build-tool bootstrap) → Preparation →
+tool's conventions, the _structure_ MUST hold — the npm implementation's `Jenkinsfile` is the current worked reference;
+a GitHub Actions `ci.yml` used the same structure before being deleted pending a rebuild, see §14): Inspection (§3.8,
+run in parallel with build-tool bootstrap) → Preparation →
 Build (phases 3-11:
 Validate through Post-integration-test) → the E2E test tier → Quality (Coverage/Security/Verify/Site-generation, §2 rows
 13-17, §8) → System/Acceptance (a placeholder stage is acceptable for test tiers this repo doesn't implement yet, e.g.
@@ -144,8 +145,8 @@ Package → the branch-gated Publish and Deploy stages (§3.3) →,
 `master` only, Tag.
 
 3.10. The pipeline definition MUST end with a completion notification step that distinguishes at least success from
-failure (and SHOULD distinguish cancelled from failure too — see the npm implementation's
-`ci.yml` `notify` job for the exact gap of checking failure-only and not cancelled, found and fixed once already) — this
+failure (and SHOULD distinguish cancelled from failure too — this exact gap, checking failure-only and not cancelled,
+was found and fixed once already in the npm implementation's now-deleted `ci.yml` `notify` job, see §14) — this
 MAY be a placeholder (e.g. an `echo`) until real notification infrastructure (email/Slack/etc.)
 exists, but the step itself, and the success/failure branching, MUST be present, not silently absent.
 
@@ -186,23 +187,23 @@ because it was the direct cause of rule 3.14's bug below. See `report.md` Round 
 
 3.14. **A CI tool whose branch-gating condition is derived from a triggering-event ref (e.g. GitHub Actions'
 `github.ref_name`) MUST NOT assume that ref resolves to the real source branch name for every event type the pipeline
-could trigger on.** On GitHub Actions specifically, `github.ref_name` is the real branch on a `push` event but
-resolves to a synthetic merge-ref identifier (e.g. `"12/merge"`) on a `pull_request` event, so a bare `github.ref_name`
+could trigger on.** On GitHub Actions specifically, `github.ref_name` is the real branch on a `push` event but resolves
+to a synthetic merge-ref identifier (e.g. `"12/merge"`) on a `pull_request` event, so a bare `github.ref_name`
 check silently never matches `devel*`/`release*`/`master` on that trigger, skipping Publish/Deploy/Tag even though the
 PR's actual source branch matches. Resolving this correctly (e.g. `github.head_ref || github.ref_name`) is one valid
-fix, but eliminating the second trigger entirely (rule 3.13) is the more robust one: it removes the ambiguity instead
-of computing around it. (Origin: found in this repo's own `ci.yml` — every branch-gating `if:` used bare
+fix, but eliminating the second trigger entirely (rule 3.13) is the more robust one: it removes the ambiguity instead of
+computing around it. (Origin: found in this repo's own `ci.yml` — every branch-gating `if:` used bare
 `github.ref_name`; the `pull_request` trigger was removed instead, so `github.ref_name` is now unambiguous. See
-`report.md` Round 6. Jenkins' multibranch `BRANCH_NAME` already reflects the real source branch regardless of
-trigger, so this class of bug can't occur there.)
+`report.md` Round 6. Jenkins' multibranch `BRANCH_NAME` already reflects the real source branch regardless of trigger,
+so this class of bug can't occur there.)
 
 3.15. **A CI tool's DAG-scheduled job MUST NOT rely on a scheduler's implicit default gating (e.g. GitHub Actions'
 "a job with a custom `if:` that doesn't call a status-check function is also implicitly required to have every direct
 `needs` job succeed") for an ordering guarantee that must never silently regress — spell the dependency out in the
 `if:` condition itself (e.g. `needs.<job>.result == 'success'`).** The implicit behavior is real and correct, but it's
 easy for a future edit to break by accident (e.g. adding `always()`/`failure()` to that same `if:` for an unrelated
-reason strips the implicit gating without the editor necessarily realizing it was ever there). This costs nothing
-extra to write out and turns a silent regression into a change a reviewer can actually see. (Origin: this repo's
+reason strips the implicit gating without the editor necessarily realizing it was ever there). This costs nothing extra
+to write out and turns a silent regression into a change a reviewer can actually see. (Origin: this repo's
 `ci.yml` Deploy jobs and Tag now spell out `needs.build.result == 'success' && needs.publish-complete.result ==
 'success'` etc. explicitly rather than leaning on the implicit rule alone — added as a defensive hardening pass
 alongside rules 3.13-3.14, not because the implicit rule was proven wrong. See `report.md` Round 6.)
@@ -460,6 +461,10 @@ removes the ability to review a version bump before anything gets published.
 This section is npm-specific and is NOT itself a requirement — it exists so a Python/Elixir implementer can see one
 concrete, working answer to
 "how do you actually satisfy rule N" without having to read the source.
+
+**`.github/workflows/ci.yml` has been deleted** (see `report.md`) after repeated DAG-specific bugs, pending a deliberate
+rebuild — the `ci.yml` cells below describe what it did while it existed and what a rebuild must satisfy again, not a
+file currently in the repo. `Jenkinsfile` and `ci-local/` remain live and unaffected.
 
 | Requirement                                       | npm implementation                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

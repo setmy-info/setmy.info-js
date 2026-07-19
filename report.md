@@ -416,8 +416,8 @@ regardless of what's in its `parallel {}` block. The bug was specific to the Git
     correctly had
     `needs: [build, publish-complete]`, but `deploy-test`,
     `deploy-prelive`, and `deploy-live` all had only `needs: build` — the comment directly above them already claimed "`needs: [build,
-publish-complete]` on every job below," so this was a partial fix that never got finished, not a deliberate choice.
-    Net effect: on
+publish-complete]` on every job below," so this was a partial fix that never got finished, not a deliberate choice. Net
+    effect: on
     `devel*`/`release*`/`master` pushes, GitHub Actions' job scheduler could start `deploy-test`/`deploy-prelive`/
     `deploy-live` as soon as
     `build` finished, running them in parallel with (or before)
@@ -437,84 +437,230 @@ publish-complete]`.
 Date: 2026-07-19
 
 Concrete trigger: a real Jenkins build of this repo's `Jenkinsfile` on the
-`develop` branch correctly ran Deploy/dev and Deploy/test, but the GitHub
-Actions run for the same branch showed both as skipped. Jenkinsfile logic
-was fine again — the bug was specific to how `ci.yml` resolves "what
-branch is this."
+`develop` branch correctly ran Deploy/dev and Deploy/test, but the GitHub Actions run for the same branch showed both as
+skipped. Jenkinsfile logic was fine again — the bug was specific to how `ci.yml` resolves "what branch is this."
 
 29. **Fixed: every branch-name check in `ci.yml` used bare
     `github.ref_name`, which resolves to the wrong value on
     `pull_request`-triggered runs.** This file triggers on both `push:
-branches: ["**"]` and `pull_request` (already flagged as a
-    double-build in backlog item 25), so an in-repo PR from `develop`
+branches: ["**"]` and `pull_request` (already flagged as a double-build in backlog item 25), so an in-repo PR from
+    `develop`
     produces two runs for the same commit: a `push` run, where
-    `github.ref_name` really is `"develop"`, and a `pull_request` run,
-    where `github.ref` is the synthetic `refs/pull/<N>/merge` ref, so
+    `github.ref_name` really is `"develop"`, and a `pull_request` run, where `github.ref` is the synthetic
+    `refs/pull/<N>/merge` ref, so
     `github.ref_name` is something like `"12/merge"` — never matching
     `devel*`/`release*`/`master`. Every `startsWith(github.ref_name,
-...)`/`github.ref_name == 'master'` check (Publish's four jobs,
-    Deploy's four jobs' job- and step-level `if:`, Tag, and the
-    `CI_BRANCH_NAME` passed into `tools/publish.js`) silently evaluated
-    false on that second run, skipping Publish/Deploy/Tag even though the
-    PR's actual source branch matched. If a developer happened to look at
-    the PR's Checks tab (which surfaces the `pull_request`-triggered run),
-    they'd see Deploy/dev and Deploy/test skipped and reasonably conclude
-    CI was broken, even though the sibling `push`-triggered run for the
-    exact same commit ran them correctly. Fixed by replacing every
+...)`/`github.ref_name == 'master'` check (Publish's four jobs, Deploy's four jobs' job- and step-level `if:`, Tag, and
+    the
+    `CI_BRANCH_NAME` passed into `tools/publish.js`) silently evaluated false on that second run, skipping
+    Publish/Deploy/Tag even though the PR's actual source branch matched. If a developer happened to look at the PR's
+    Checks tab (which surfaces the `pull_request`-triggered run), they'd see Deploy/dev and Deploy/test skipped and
+    reasonably conclude CI was broken, even though the sibling `push`-triggered run for the exact same commit ran them
+    correctly. Fixed by replacing every
     `github.ref_name` used for branch-gating with `(github.head_ref ||
 github.ref_name)` — `github.head_ref` is set only on `pull_request`
-    events and holds the real source branch name, `github.ref_name` alone
-    is already correct on `push`, so the `||` resolves correctly for both
-    trigger types. Verified all 12 call sites were updated consistently
-    and the resulting YAML still parses (`js-yaml`).
-    - This does not fix the double-build itself (backlog item 25 stays
-      open) — both runs still happen for an in-repo PR — but both now
-      resolve the branch name correctly instead of only the `push` one.
+    events and holds the real source branch name, `github.ref_name` alone is already correct on `push`, so the `||`
+    resolves correctly for both trigger types. Verified all 12 call sites were updated consistently and the resulting
+    YAML still parses (`js-yaml`).
+    - This does not fix the double-build itself (backlog item 25 stays open) — both runs still happen for an in-repo
+      PR — but both now resolve the branch name correctly instead of only the `push` one.
     - `Jenkinsfile` needed no change: Jenkins' multibranch `BRANCH_NAME`
-      already reflects the real source branch regardless of how the build
-      was triggered, so this class of bug can't occur there.
+      already reflects the real source branch regardless of how the build was triggered, so this class of bug can't
+      occur there.
 
-**Follow-up, same date**: after the `head_ref || ref_name` fix above landed
-(committed and pushed — verified `HEAD` matched `origin/develop`), a fresh
-push to `develop` still showed Deploy/dev and Deploy/test skipped in
-GitHub Actions. Every static check available (reading the committed YAML,
-validating it parses, walking GitHub Actions' documented default
-job-gating semantics by hand) said this should already work — but static
-analysis without access to the actual run's logs couldn't get further, and
-guessing wrong again wasn't an acceptable next step. Rather than keep
-patching around the `push`/`pull_request` dual-trigger ambiguity (which
-requires correctly resolving branch name for _two_ different event
-context shapes, is easy to get subtly wrong, and had already been gotten
-wrong once), escalated to removing the ambiguity's source entirely:
+**Follow-up, same date**: after the `head_ref || ref_name` fix above landed (committed and pushed — verified `HEAD`
+matched `origin/develop`), a fresh push to `develop` still showed Deploy/dev and Deploy/test skipped in GitHub Actions.
+Every static check available (reading the committed YAML, validating it parses, walking GitHub Actions' documented
+default job-gating semantics by hand) said this should already work — but static analysis without access to the actual
+run's logs couldn't get further, and guessing wrong again wasn't an acceptable next step. Rather than keep patching
+around the `push`/`pull_request` dual-trigger ambiguity (which requires correctly resolving branch name for _two_
+different event context shapes, is easy to get subtly wrong, and had already been gotten wrong once), escalated to
+removing the ambiguity's source entirely:
 
-30. **`pull_request` trigger removed from `ci.yml` outright**, not just
-    branch-name-patched. `push: branches: ["**"]` alone already satisfies
-    rule 3.2 (every branch runs Inspection-through-Package) for a
-    feature/PR branch, so `pull_request` was never load-bearing — it only
-    added the double-build (backlog item 25, now resolved) and was the
+30. **`pull_request` trigger removed from `ci.yml` outright**, not just branch-name-patched. `push: branches: ["**"]`
+    alone already satisfies rule 3.2 (every branch runs Inspection-through-Package) for a feature/PR branch, so
+    `pull_request` was never load-bearing — it only added the double-build (backlog item 25, now resolved) and was the
     root cause of finding 29 above. With `push` as the only trigger,
-    `github.ref_name` is unambiguously the real branch on every run, full
-    stop — reverted the `github.head_ref || github.ref_name` fallback
-    back to bare `github.ref_name` everywhere, since it's dead weight once
+    `github.ref_name` is unambiguously the real branch on every run, full stop — reverted the
+    `github.head_ref || github.ref_name` fallback back to bare `github.ref_name` everywhere, since it's dead weight once
     there's only one trigger to disambiguate.
 31. **`deploy-dev`/`deploy-test`/`deploy-prelive`/`deploy-live`/`tag`'s
-    `if:` conditions now spell out `needs.<job>.result == 'success'` for
-    each of their direct `needs` explicitly**, instead of resting solely
-    on GitHub Actions' implicit default job-gating (a job whose own `if:`
-    doesn't call a status-check function is _also_ implicitly required to
-    have every direct `needs` job succeed). That implicit rule is
-    documented and was already believed correct — this change doesn't
-    contradict it — but for the one guarantee that must never silently
-    regress (Publish finishing before Deploy starts), spelling it out
-    removes any dependency on that belief being right, and makes the
-    guarantee visible to a future reviewer instead of implicit.
-    - New rules added: `requirements-rules.md` §3.13 (prefer one trigger
-      over several redundant ones), §3.14 (a ref-derived branch-name check
-      must not assume the ref means the same thing across every trigger
-      type — superseded by §3.13 here, but kept as a rule for a project
-      that has a real reason to keep multiple triggers), §3.15 (spell out
-      `needs.<job>.result` explicitly for a DAG ordering guarantee that
-      must not regress, rather than resting on implicit default gating).
-    - Still unverified against a real GitHub Actions run at time of
-      writing (no `gh` CLI / live log access from this session) — the
-      next real push to `develop` is the actual confirmation.
+    `if:` conditions now spell out `needs.<job>.result == 'success'` for each of their direct `needs` explicitly**,
+    instead of resting solely on GitHub Actions' implicit default job-gating (a job whose own `if:`
+    doesn't call a status-check function is _also_ implicitly required to have every direct `needs` job succeed). That
+    implicit rule is documented and was already believed correct — this change doesn't contradict it — but for the one
+    guarantee that must never silently regress (Publish finishing before Deploy starts), spelling it out removes any
+    dependency on that belief being right, and makes the guarantee visible to a future reviewer instead of implicit.
+    - New rules added: `requirements-rules.md` §3.13 (prefer one trigger over several redundant ones), §3.14 (a
+      ref-derived branch-name check must not assume the ref means the same thing across every trigger type — superseded
+      by §3.13 here, but kept as a rule for a project that has a real reason to keep multiple triggers), §3.15 (spell
+      out
+      `needs.<job>.result` explicitly for a DAG ordering guarantee that must not regress, rather than resting on
+      implicit default gating).
+    - Still unverified against a real GitHub Actions run at time of writing (no `gh` CLI / live log access from this
+      session) — the next real push to `develop` is the actual confirmation.
+
+## Round 7: `ci.yml` deleted outright
+
+Date: 2026-07-19
+
+Before removal, re-verified Round 5's item 28 fix against the actual committed file and found it had **not** held:
+`deploy-dev` still had `needs: [build, publish-complete]`, but `deploy-test`, `deploy-prelive`, and `deploy-live` were
+back to `needs: build` only — the same partial-fix shape Round 5 already described once. Whether that was a lost commit
+or a re-introduced edit, the practical lesson is the same one §3.12 already exists to guard against: don't trust this
+file's own history as proof of the live file's state — re-check the committed YAML directly. Re-applied
+`publish-complete` to all three remaining jobs, re-verified with `js-yaml` and `prettier --check`, and confirmed with a
+full `./ci-local/run.sh develop` run (separately: this also caught a live `prettier --check` failure on `ci.yml`
+itself from the fix's own formatting, fixed with `prettier --write`).
+
+32. **`.github/workflows/ci.yml` deleted outright, not patched further.** Three rounds (3, 5, 6) of DAG-specific bugs
+    surfacing after the fact, plus the drift above, was enough signal that incremental patching wasn't converging.
+    Deleted the file; `Jenkinsfile` and `ci-local/` are the sole working CI implementation until a GitHub Actions
+    rebuild is deliberately scheduled. `README.md`'s CI section and `requirements-rules.md`'s §14 implementation table
+    were updated to stop describing `ci.yml` as a present, working file — the rules themselves (§3.12-§3.15) stay, since
+    they're general DAG-CI requirements a rebuild must satisfy again, not specific to the deleted YAML.
+33. **Corrected an earlier in-session claim about `install-local`.** It was described as a simple oversight ("just wire
+    it into the Build/Package stage") without first checking this file — items 11 and 20 above already flag it as a
+    deliberately undecided Maven-ism (repurpose into a packed-tarball consumer test, or reduce to a documented no-op),
+    not a plain gap to fill. Left unresolved, per the existing recommendation; not fixed this round.
+
+## What more can be done: onboarding `setmy-info-less` and `angular-start-project`
+
+Date: 2026-07-19
+
+Read through the build tooling (root and per-package `package.json`, actual compiler/test invocations, CI files if
+any) of two sibling repos that are real, pre-existing candidates to eventually move into this skeleton as new module
+types — `/home/has/sources/components/setmy.info/submodules/setmy-info-less` (a LESS/CSS component-library monorepo,
+packages `setmy-info-less`, `-enterprise`, `-experimental`, `-extended`, `-fancy`, `-ide`, `-angular-start-project`,
+plus a shared `common` package) and `/home/has/sources/components/setmy.info/submodules/angular-start-project` (an
+Angular app + library + two LESS style packages). No code moved or copied — read-only investigation, as asked.
+
+### What each project's build actually does
+
+**`setmy-info-less`** (per `packages/setmy-info-less/package.json`):
+
+- Compile: `lessc ./src/main/less/main.less dist/main.css` (plain) and again with `--clean-css` for the minified
+  build — two separate invocations, not a single command with a minify flag.
+- A Pug-templated HTML demo page per component, built by a hand-rolled `../common/test/js/pugBuild.js` (shared across
+  all the LESS-variant packages via the `common` workspace package), served locally by a hand-rolled
+  `../common/test/js/server.js` (Express).
+- `kss --source src/main/less --destination dist/styleguide --css ../main.css` — a living style guide generated
+  straight from LESS comments. This is a real artifact type the current skeleton's Site phase (§8) has no concept
+  of.
+- Lint: `stylelint` over `**/*.less`, with a `stylelint-less` syntax plugin — this is the module type's actual Lint
+  phase (§2 row 5), analogous to `eslint`/`ruff`/`credo` for other languages.
+- Test: Jest for unit, a **separate** `jest.e2e.config.js` for e2e, plus both `selenium-webdriver` and a
+  `playwright.config.js` present as dependencies/config — two different e2e stacks configured in the same package,
+  not consolidated.
+- No `validate`, no security/audit script, no SBOM, no sign, no publish/deploy script, no resource/profile filtering,
+  and **no checked-in CI pipeline file at all** (no `Jenkinsfile`, no `.github/workflows/*`).
+
+**`angular-start-project`** (per `packages/angular-start-project/package.json` + `angular.json`):
+
+- Build: `ng build --configuration <name>`, and the Angular CLI configurations already defined in `angular.json` are
+  named `dev`/`ci`/`test`/`prelive`/`live` — **the exact ADR-0041 canonical six** (`local` maps to `ng serve`/`watch`,
+  no separate `local` build configuration needed). This wasn't designed against this skeleton's rules but already
+  matches them exactly.
+- A `bin/versionModule.js` run as `prebuild` (wired via npm's `prebuild` lifecycle hook, not a separate documented
+  phase) stamps version/build metadata into the artifact before `ng build` runs. Nothing in the current npm reference
+  implementation's `tools/*.js` does this.
+- Test: `ng test` for unit (Angular's own runner), the same separate-Jest-config + Selenium e2e pattern as
+  `setmy-info-less` above.
+- No lint script at all (no ESLint wired, despite Angular CLI supporting it), no `validate`, no security/audit, no
+  SBOM, no sign, no publish/deploy, no resource/profile filtering beyond the build configurations themselves, no CI
+  file.
+- `angular-start-project-library` (plain JS service layer, deps like `js-api-extend`/`servicejs`/`servedjs`) and
+  `angular-start-project-style` (a LESS package) both have `"test": "echo \"Error: no test specified\" && exit 1"` —
+  unimplemented placeholders, not even a no-op.
+- **Real proof the multi-module-type coexistence goal already works in practice**: `angular-start-project-style`'s
+  `package.json` depends on `setmy-info-less-extended@^5.0.0` — an Angular-adjacent LESS package already consumes a
+  published package from the other sibling repo. That's the cross-module-type dependency pattern §5.2 requires,
+  demonstrated for real, across repos, before this skeleton existed.
+
+### Generic-framework work this suggests (proposals, not done)
+
+1. **A real LESS/CSS module override, built to this exact pattern, not a hypothetical one.** README's "Adapting the
+   skeleton" section already sketches a LESS/CSS module in prose; `setmy-info-less` is the concrete spec to build it
+   against: `"build"` → `lessc` (plain) + `lessc --clean-css` (minified) as two dist outputs (matches this skeleton's
+   own `index.js`/`index.min.js` two-output convention already), `"lint"` → `stylelint` + `stylelint-less`.
+2. **Style guide as a new Site-phase artifact type (§8).** `kss`-generated living style guides aren't API docs,
+   coverage, security, or dependency-tree reports — the four §8.1 categories don't have a slot for "component style
+   guide." Worth an explicit §8.1 addition (or an acknowledged per-module-type Site extension point) rather than
+   silently folding it into "API documentation."
+3. **A real Angular module override, and it's nearly free.** `README`'s sketch (`"build": "ng build"`) is confirmed
+   correct against a real repo, and the configuration-name alignment (§4.1's exact six names, already used by
+   `angular.json` unprompted) means the Resources/profile phase (§6) needs essentially no adaptation for an Angular
+   module — `ng build --configuration <profile>` already **is** the profile mechanism.
+4. **A version-stamping pre-build hook is a real, missing capability.** `bin/versionModule.js`'s job (embed
+   version/build metadata into the artifact before compile) has no equivalent anywhere in `tools/*.js`. Worth an
+   optional phase or documented hook point, not assumed to be Angular-specific — the same need applies to any module
+   type once real publishing starts.
+5. **Migrating either project would mean adopting the skeleton's entire CI/quality/publish/deploy layer, not just its
+   build step** — neither project has a CI file, a lint gate that isn't stylelint-only, a security scan, SBOM, sign,
+   publish, deploy, or profile-filtering today. That's the actual value proposition of moving them in, worth stating
+   plainly rather than assuming "wire the build script" is most of the work.
+6. **Two redundant e2e stacks (Jest+Selenium and a separate Playwright config) already exist side by side in
+   `setmy-info-less`.** The skeleton's uniform `pre-e2e-test`/`e2e-test`/`post-e2e-test` +
+   `tools/http-server.js` pattern (already Playwright-free, plain `node --test` + `fetch`) would consolidate this to
+   one approach — concrete simplification, not just parity.
+7. **Open question, not resolved here**: `setmy-info-less` packages six near-identical LESS theme variants
+   (`setmy-info-less`, `-enterprise`, `-experimental`, `-extended`, `-fancy`, `-ide`) sharing one `common` helper
+   package. The current skeleton's model is "one module = one fully-scripted package.json" (§5.1) — whether six
+   sibling theme variants should each get that full treatment, or whether the skeleton needs a lighter "family of
+   modules sharing one build/test script definition" pattern, is a real design decision, not something to default on
+   without asking.
+
+### `js-api-extend` → `servicejs` → `servedjs` → {`servedjs-test`, `servedjs-geo`}: a real, already-published dependency chain
+
+Same read-only pass over five more sibling repos — `/home/has/sources/components/setmy.info/submodules/js-api-extend`,
+`servicejs`, `servedjs`, `servedjs-test`, `servedjs-geo`. These five are the oldest, most homogeneous family looked at
+so far: near-identical `package.json`/`karma.conf.js` (evidently copy-pasted across all five) forming an exact-pinned
+dependency chain — `js-api-extend@1.3.4` ← `servicejs` (`"js-api-extend": "1.3.4"`, exact pin) ← `servedjs`
+(`"servicejs": "1.2.4"`, exact pin) ← `servedjs-test`/`servedjs-geo` (each `"servedjs": "1.5.5"`, exact pin).
+
+What their build actually does:
+
+- **Build**: a hand-rolled `src/build/index.js` — reads one plain global-script source file
+  (`src/main/webapp/js/<name>.js`), minifies it with `uglify-js`, copies raw + minified + an `index.js` shim into
+  `dist/`. No bundler, despite `webpack`/`webpack-cli` sitting in every one of the five `devDependencies` blocks —
+  grepped `src/` in all five, never invoked by any script. Dead weight, independent of any migration.
+- **Test**: Karma + Jasmine against a **real Firefox-headless browser** (not jsdom, not Node's built-in runner) —
+  `karma.conf.js` even polyfills `global.Storage = {...}` just to make the source loadable under plain Node at all,
+  which is itself evidence the source assumes a real browser environment. Coverage → `target/coverage/` HTML, JUnit
+  XML → `target/` — Maven-flavored output paths that predate ADR-0045 by years. The `unit` script (`karma
+--single-run`) and `tdd` script (watch mode) are the actual tests; **the `test` script is not a test at all** — it's
+  `node src/main/webapp/node/index.js`, a manual `console.log("Value should bee boolean: ", ...)` smoke check with no
+  assertion, meant to be eyeballed by a human running it by hand.
+- **Release**: an entirely manual, un-gated `release.sh` — `npm install` → `npm audit fix` (silently mutates
+  dependency versions) → `npm ci` → `build` → `test` → `unit` → commits `dist/` + `package.json`/`package-lock.json`
+  straight to git → merges `develop` into `master` → tags → `npm publish` **for real**, unconditionally, from a
+  developer's own machine — no CI run, no branch gate, no dry-run step to inspect first. `dist/` is git-tracked in
+  all five repos (not git-ignored).
+- No lint tool in any of the five, no CI file in any of the five (no `Jenkinsfile`, no GitHub Actions workflow) — same
+  gap as the LESS/Angular repos above. `_config.yml` (Jekyll/GitHub Pages) is present in four of five but missing
+  from `servedjs-test` — an inconsistency even within this otherwise-identical family.
+
+What this adds to the proposal list above:
+
+8. **The clearest real-world case yet for Changesets' cascading bump (§13.3, already implemented here).** Bumping
+   `js-api-extend` today means manually editing the exact-pinned dependency version in `servicejs`'s `package.json`,
+   then `servedjs`'s, then both leaf packages' — by hand, in the right order, across five separate repos. Folding this
+   chain into one workspace replaces that with `npm run changeset` + `changeset:version`'s automatic cascading bump —
+   exactly the problem §13.3 exists to solve, not a hypothetical one.
+9. **`release.sh` is the strongest argument yet for §10's dry-run-by-default rule.** Real, unconditional `npm publish`
+   from a developer's machine, `npm audit fix` silently applied and committed moments before release, no CI
+   verification, no branch gate. Migrating these in would replace it with the existing
+   `tools/publish.js`/`tools/deploy.js` dry-run-unless-`PUBLISH_EXECUTE=true` pattern for free — no new tooling
+   needed, just moving in.
+10. **`dist/` is git-tracked in all five**, contradicting this skeleton's git-ignored-generated-output convention.
+    Migrating means untracking it and trusting the Package phase to regenerate it, same as every module here already
+    does.
+11. **A real-browser unit-test tier (Karma + Jasmine + Firefox-headless) is a genuinely different tool need than
+    anything in `tools/*.js` today**, which only ever runs `node --test` in-process. If a future module's source
+    directly touches browser-only APIs in a way jsdom-in-Node can't faithfully exercise (this family's `Storage`
+    polyfill is a real example of needing exactly that), that's an open question the skeleton hasn't had to answer
+    yet: an optional real-browser unit-test phase, or is jsdom-in-Node always treated as sufficient? Not resolved
+    here.
+12. **The `test` script lying about what it runs** (a manual eyeball-the-console smoke check, not an assertion-based
+    test) is a real-world illustration of exactly why §1.2 ("a phase name MUST mean what a Maven-fluent developer
+    expects") matters — this is the concrete failure mode that rule exists to prevent, not an abstract concern.

@@ -74,34 +74,16 @@ run in a stage-level `post { always { ... } }` block so a failing
 around a possibly failing
 `integration-test` goal.
 
-`.github/workflows/ci.yml` is the same pipeline ported to GitHub Actions:
-Jenkins parallel stages become parallel jobs (`pre-build`/`build-tools` for Inspection; `release-publish`/
-`snapshot-publish`/`release-reports`/
-`snapshot-reports` for Publish; `deploy-dev`/`deploy-test`/
-`deploy-prelive`/`deploy-live` for Deploy), Jenkins `when`/`expression`
-branch gates become `if:` conditions on `github.ref_name`, and the
-`post-integration-test`/`post-e2e-test` cleanup steps use `if: always()`
-for the same guarantee. A final `notify` job (`if: always()`, depends on every other job) stands in for the
-Jenkinsfile's `post { success / failure
-}` `emailext` steps — real notification wiring (email/Slack/etc.) still needs to be added to both files.
-
-Jenkins' declarative stages are strictly sequential no matter what runs in parallel inside them, so the whole Publish
-stage always finishes before Deploy starts — GitHub Actions has no such guarantee (a job starts the moment its own
-`needs:` are satisfied), so `ci.yml` adds a `publish-complete`
-barrier job (`needs:` all four Publish jobs, `if: always()` so it still runs when branch-gating skips some of them,
-fails if any of them actually failed) and every `deploy-*` job depends on it alongside `build`. Each of those `deploy-*`
-jobs (and `tag`) also spells out `needs.build.result == 'success' && needs.publish-complete.result == 'success'`
-directly in its own `if:`, rather than leaning only on GitHub's implicit default job-gating for something this
-important — see `requirements-rules.md` §3.12 and §3.15.
-
-This file triggers on `push` only — no `pull_request`. `push: branches: ["**"]` already runs full CI on every branch,
-including whatever branch is backing an open PR, so a `pull_request` trigger never added coverage, only a redundant
-second run of the same commit (`report.md` backlog item 25). It also actively broke branch-gating: on a
-`pull_request` event GitHub points `github.ref` at the synthetic `refs/pull/<N>/merge` ref, so `github.ref_name`
-resolves to something like `"12/merge"` there — never matching `devel*`/`release*`/`master` — silently skipping
-Publish/Deploy/Tag on that second run even though the PR's real source branch matched. Removing the trigger removes
-the failure mode outright: with `push` as the only trigger, `github.ref_name` is always the real branch. See
-`requirements-rules.md` §3.13-§3.14.
+**GitHub Actions (`.github/workflows/ci.yml`) has been removed for now** — it existed as the same pipeline ported to
+GitHub Actions (parallel jobs for Inspection/Publish/Deploy, `if:` conditions on `github.ref_name` standing in for
+Jenkins' `when`/`expression` branch gates, a `publish-complete` barrier job giving Deploy-waits-for-Publish ordering
+that GitHub's job DAG doesn't provide for free the way Jenkins' sequential stages do) but went through several rounds of
+DAG-specific bugs (see `report.md`, Rounds 3/5/6) that kept surfacing after the fact. Rather than keep patching it
+incrementally, it was deleted outright to be rebuilt deliberately later. `Jenkinsfile` and `ci-local/` are the current,
+working CI implementation in the meantime — the rules a future rebuild must satisfy (§3.12-§3.15:
+Publish-before-Deploy barrier, one trigger not several, ref-derived branch-name resolution, explicit
+`needs.<job>.result` checks) are still recorded in `requirements-rules.md`, since they're general DAG-CI requirements,
+not specific to the deleted file.
 
 ### Emulating CI locally, without Jenkins
 
@@ -280,8 +262,8 @@ Changesets only handles _what version, what changelog_ — actually pushing to a
 `npm run publish` (`tools/publish.js`) resolves an npm dist-tag from the current branch (`master` -> `latest`,
 `release*` -> `release-candidate`,
 `devel*` -> `next`, anything else -> skipped) and runs `npm publish` for real, but **always as `--dry-run`** unless
-`PUBLISH_EXECUTE=true` is set — nothing in `Jenkinsfile`/`ci.yml` sets it, so CI stays dry-run until someone opts in on
-purpose, once there's a real registry to publish to.
+`PUBLISH_EXECUTE=true` is set — nothing in `Jenkinsfile` sets it, so CI stays dry-run until someone opts in on purpose,
+once there's a real registry to publish to.
 
 One non-obvious thing worth knowing if you ever touch this file: npm treats a script literally named `"publish"` as a
 reserved lifecycle hook that `npm publish` runs automatically. Since our own npm-run-publish script is named `publish`
@@ -352,15 +334,11 @@ multi-module `mvn site` run. Each module site links:
 
 `site/` is generated output and git-ignored.
 
-`ci.yml`'s `release-reports` job (master branch only) is the real
-`mvn site-deploy` equivalent: publishes the site to GitHub Pages via
-`actions/upload-pages-artifact` + `actions/deploy-pages`. This needs Pages enabled for the repo first (Settings →
-Pages → Source: "GitHub Actions") - a repo setting, not something the workflow file can turn on itself.
-`devel*` branches don't get this (`snapshot-reports` stays a placeholder):
-GitHub Pages serves one site, and every devel branch publishing to the same URL would just overwrite each other without
-a per-branch preview path, which isn't wired up. `Jenkinsfile`'s equivalent step also stays a placeholder - there's no
-Jenkins-native "push to GitHub Pages" without picking real target credentials, which is a decision to make explicitly,
-not guess at.
+The real `mvn site-deploy` equivalent — publishing `site/` to GitHub Pages — lived in the now-deleted `ci.yml`'s
+`release-reports` job (`actions/upload-pages-artifact` + `actions/deploy-pages`, master branch only); it's gone along
+with the rest of that file, pending the GitHub Actions rebuild. `Jenkinsfile`'s equivalent step stays a placeholder in
+the meantime - there's no Jenkins-native "push to GitHub Pages" without picking real target credentials, which is a
+decision to make explicitly, not guess at.
 
 ## Known deliberate differences from Maven
 
