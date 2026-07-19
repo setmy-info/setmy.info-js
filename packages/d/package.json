@@ -1,59 +1,59 @@
 {
-  "name": "@demo/module-d",
-  "version": "1.0.0",
-  "description": "Module D workspace package",
-  "license": "MIT",
-  "author": "Imre Tabur <imre.tabur@mail.ee>",
-  "type": "module",
-  "engines": {
-    "node": ">=24.0.0"
-  },
-  "main": "./dist/index.js",
-  "config": {
-    "server": {
-      "port": 43431,
-      "directory": "web"
-    }
-  },
-  "exports": {
-    ".": {
-      "default": "./dist/index.js"
+    "name": "@demo/module-d",
+    "version": "1.0.0",
+    "description": "Module D workspace package",
+    "license": "MIT",
+    "author": "Imre Tabur <imre.tabur@mail.ee>",
+    "type": "module",
+    "engines": {
+        "node": ">=24.0.0"
     },
-    "./min": "./dist/index.min.js"
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "dependencies": {
-    "@demo/module-c": "1.0.0"
-  },
-  "scripts": {
-    "clean": "node ../../tools/clean.js",
-    "validate": "node ../../tools/validate.js",
-    "format": "prettier --write .",
-    "lint": "eslint .",
-    "resources": "node ../../tools/resources.js",
-    "build": "node ../../tools/build.js",
-    "server": "node ../../tools/http-server.js",
-    "stop-server": "node ../../tools/http-server.js stop",
-    "test": "node ../../tools/run-tests.js unit",
-    "pre-integration-test": "node ../../tools/preintegration-test.js",
-    "integration-test": "node ../../tools/integration-test.js",
-    "post-integration-test": "node ../../tools/postintegration-test.js",
-    "pre-e2e-test": "node ../../tools/pree2e-test.js",
-    "e2e-test": "node ../../tools/e2e-test.js",
-    "post-e2e-test": "node ../../tools/poste2e-test.js",
-    "coverage": "node ../../tools/coverage.js",
-    "security": "node ../../tools/security.js",
-    "verify": "node ../../tools/verify.js",
-    "package": "node ../../tools/package.js",
-    "sbom": "node ../../tools/package.js --sbom",
-    "sign": "node ../../tools/sign.js",
-    "install-local": "node ../../tools/install-local.js",
-    "publish": "node ../../tools/publish.js",
-    "deploy": "node ../../tools/deploy.js",
-    "docs": "node ../../tools/docs.js",
-    "site": "node ../../tools/site.js"
-  }
+    "main": "./dist/index.js",
+    "config": {
+        "server": {
+            "port": 43431,
+            "directory": "web"
+        }
+    },
+    "exports": {
+        ".": {
+            "default": "./dist/index.js"
+        },
+        "./min": "./dist/index.min.js"
+    },
+    "files": [
+        "dist",
+        "!dist/resources",
+        "README.md"
+    ],
+    "dependencies": {
+        "@demo/module-c": "1.0.0"
+    },
+    "scripts": {
+        "clean": "node ../../tools/clean.js",
+        "validate": "node ../../tools/validate.js",
+        "format": "prettier --write .",
+        "lint": "eslint .",
+        "resources": "node ../../tools/resources.js",
+        "build": "node ../../tools/build.js",
+        "server": "node ../../tools/http-server.js",
+        "stop-server": "node ../../tools/http-server.js stop",
+        "test": "node ../../tools/run-tests.js unit",
+        "pre-integration-test": "node ../../tools/preintegration-test.js",
+        "integration-test": "node ../../tools/integration-test.js",
+        "post-integration-test": "node ../../tools/postintegration-test.js",
+        "pre-e2e-test": "node ../../tools/pree2e-test.js",
+        "e2e-test": "node ../../tools/e2e-test.js",
+        "post-e2e-test": "node ../../tools/poste2e-test.js",
+        "coverage": "node ../../tools/coverage.js",
+        "verify": "node ../../tools/verify.js",
+        "package": "node ../../tools/package.js",
+        "sbom": "node ../../tools/package.js --sbom",
+        "sign": "node ../../tools/sign.js",
+        "install-local": "node ../../tools/install-local.js",
+        "publish": "node ../../tools/publish.js",
+        "deploy": "node ../../tools/deploy.js",
+        "docs": "node ../../tools/docs.js",
+        "site": "node ../../tools/site.js"
+    }
 }

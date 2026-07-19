@@ -5,23 +5,23 @@
  */
 
 export interface ModuleBDescriptor {
-  module: "b";
-  message: string;
+    module: 'b';
+    message: string;
 }
 
 export function createMessageFromB(): string {
-  return "message from module-b";
+    return 'message from module-b';
 }
 
 export function bar(): string {
-  const message = "bar() from module-b";
-  console.log(message);
-  return message;
+    const message = 'bar() from module-b';
+    console.log(message);
+    return message;
 }
 
 export function createDescriptorFromB(): ModuleBDescriptor {
-  return {
-    module: "b",
-    message: createMessageFromB(),
-  };
+    return {
+        module: 'b',
+        message: createMessageFromB(),
+    };
 }

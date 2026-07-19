@@ -2,16 +2,16 @@ import fs from "node:fs";
 import path from "node:path";
 
 export function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
 }
 
 export function renderPage(title, bodyHtml) {
-  return `<!doctype html>
+    return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -37,24 +37,28 @@ export function renderPage(title, bodyHtml) {
 }
 
 export function writePage(filePath, title, bodyHtml) {
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, renderPage(title, bodyHtml));
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, renderPage(title, bodyHtml));
 }
 
 export function parseLcov(lcovText) {
-  const files = [];
-  let current = null;
+    const files = [];
+    let current = null;
 
-  for (const line of lcovText.split("\n")) {
-    if (line.startsWith("SF:")) {
-      current = { file: line.slice(3).trim(), linesFound: 0, linesHit: 0 };
-      files.push(current);
-    } else if (line.startsWith("LF:")) {
-      current.linesFound = Number(line.slice(3));
-    } else if (line.startsWith("LH:")) {
-      current.linesHit = Number(line.slice(3));
+    for (const line of lcovText.split("\n")) {
+        if (line.startsWith("SF:")) {
+            current = {
+                file: line.slice(3).trim(),
+                linesFound: 0,
+                linesHit: 0,
+            };
+            files.push(current);
+        } else if (line.startsWith("LF:")) {
+            current.linesFound = Number(line.slice(3));
+        } else if (line.startsWith("LH:")) {
+            current.linesHit = Number(line.slice(3));
+        }
     }
-  }
 
-  return files;
+    return files;
 }

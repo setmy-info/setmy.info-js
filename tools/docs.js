@@ -12,16 +12,16 @@ const srcDir = path.join(workspace.workspace, "src");
 const outDir = path.join(workspace.workspace, "site", "docs");
 
 if (!fs.existsSync(srcDir)) {
-  console.log(`No src directory to document for ${workspace.packageName}`);
-  process.exit(0);
+    console.log(`No src directory to document for ${workspace.packageName}`);
+    process.exit(0);
 }
 
 fs.rmSync(outDir, { recursive: true, force: true });
 
 console.log(`Generating API docs for ${workspace.packageName}`);
 execSync(`"${jsdocBin}" "${srcDir}" --recurse --destination "${outDir}"`, {
-  cwd: workspace.workspace,
-  stdio: "inherit",
+    cwd: workspace.workspace,
+    stdio: "inherit",
 });
 
 console.log(`Created ${outDir}`);

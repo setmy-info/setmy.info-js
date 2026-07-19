@@ -7,18 +7,18 @@
 import { createDescriptorFromC, createMessageFromC } from "@demo/module-c";
 
 export function qux() {
-  const message = "qux() from module-d";
-  console.log(message);
-  return message;
+    const message = "qux() from module-d";
+    console.log(message);
+    return message;
 }
 
 export function createDescriptorFromD() {
-  return {
-    module: "d",
-    dependency: createDescriptorFromC(),
-  };
+    return {
+        module: "d",
+        dependency: createDescriptorFromC(),
+    };
 }
 
 export function createMessageFromD() {
-  return `${createMessageFromC()} -> module-d`;
+    return `${createMessageFromC()} -> module-d`;
 }

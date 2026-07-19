@@ -1,4 +1,4 @@
 {
-  "apiBaseUrl": "https://dev.api.setmy.info",
-  "logLevel": "debug"
+    "apiBaseUrl": "https://dev.api.setmy.info",
+    "logLevel": "debug"
 }

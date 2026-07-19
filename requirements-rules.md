@@ -135,7 +135,8 @@ as a confusing failure three phases in. (Origin: the org's `jenkinsfile-starter`
 template's own "Pre-build" stage — `node --version`, `npm --version`,
 `fileExists 'README.md'` in the npm implementation — this is a real requirement inherited from that template, not an
 npm-specific nicety, and was previously missing from this document even though the working
-`Jenkinsfile`/`ci.yml` both already do it.)
+`Jenkinsfile` already does it — as did the GitHub Actions `ci.yml` while it existed, before its deletion pending a
+rebuild, see §14.)
 
 3.9. The pipeline definition SHOULD group phases into named stages mirroring this shape (stage _names_ MAY differ per CI
 tool's conventions, the _structure_ MUST hold — the npm implementation's `Jenkinsfile` is the current worked reference;
@@ -208,9 +209,10 @@ so this class of bug can't occur there.)
 easy for a future edit to break by accident (e.g. adding `always()`/`failure()` to that same `if:` for an unrelated
 reason strips the implicit gating without the editor necessarily realizing it was ever there). This costs nothing extra
 to write out and turns a silent regression into a change a reviewer can actually see. (Origin: this repo's
-`ci.yml` Deploy jobs and Tag now spell out `needs.build.result == 'success' && needs.publish-complete.result ==
-'success'` etc. explicitly rather than leaning on the implicit rule alone — added as a defensive hardening pass
-alongside rules 3.13-3.14, not because the implicit rule was proven wrong. See `report.md` Round 6.)
+now-deleted `ci.yml`, whose Deploy jobs and Tag spelled out `needs.build.result == 'success' &&
+needs.publish-complete.result == 'success'` etc. explicitly rather than leaning on the implicit rule alone — added as a
+defensive hardening pass alongside rules 3.13-3.14, not because the implicit rule was proven wrong. See `report.md`
+Round 6; the rule stays for any future DAG-CI rebuild.)
 
 ## 4. Environments and profiles (ADR-0041 / ADR-0042)
 
@@ -265,13 +267,15 @@ substitution — it MUST work unmodified on JSON, YAML, XML, `.properties`,
 solving a different, harder problem this doesn't need.
 
 6.3. Property values MUST come from a per-environment source keyed by exactly the ADR-0041 six names (§4.1), e.g. one
-config file per environment, in whatever format is most idiomatic for the ecosystem (the npm implementation uses one
-flat JSON object per environment — see §14 — specifically because JSON, not `.properties`, is the natural choice in the
-Node/JS/TS world; the Python implementation uses one YAML file per environment instead — not JSON, matching the real
-precedent in this org's own existing Python repos (`python-commons` ships a dedicated PyYAML dependency and a `yaml/`
-module; `python-start-project`'s own environment config is `application.yaml`/`application-dev.yaml`) rather than
-guessing at a format in isolation; an Elixir one might reach for `.exs`/`.json` — the _format_ is an ecosystem choice,
-the _one-file-per-canonical-environment_ structure is not). A module MAY
+config file per environment. **The org's cross-language default profile format is YAML** — the Python and Elixir
+implementations both use one YAML file per environment (`profiles/<name>.yaml`), matching the real precedent in this
+org's own existing repos (`python-commons` ships a dedicated PyYAML dependency and a `yaml/` module;
+`python-start-project`'s own environment config is `application.yaml`/`application-dev.yaml`). **The npm implementation
+alone deliberately deviates and keeps flat JSON** (`profiles/<name>.json`, see §14) — an explicit decision (2026-07-19,
+recorded in `report.md` Round 8/9 item 34), because Node has no stdlib YAML parser and switching would add a
+third-party runtime dependency to `tools/` for zero functional gain; JSON is the natural zero-dependency choice in the
+Node/JS/TS world. A new language implementation SHOULD default to YAML and record its reasoning if it deviates. The
+_format_ is per-ecosystem; the _one-file-per-canonical-environment_ structure is not. A module MAY
 override/extend the shared values with its own per-module, per-environment values — shared value wins only where the
 module doesn't override it (later/more-specific source wins per key, not per file).
 
@@ -281,6 +285,15 @@ corrupted-looking artifact that's hard to root-cause; crashing the whole build o
 property is disproportionate — a warning is the right severity.)
 
 6.5. A module with no resources directory MUST be a silent no-op for this phase, not an error.
+
+6.6. **Profile-filtered output MUST NOT be included in a published artifact, and MUST be ignored by version control.**
+The filtered output is environment-specific generated content (whatever profile CI happened to filter last — typically
+`ci`), and a published package is supposed to be one environment-neutral artifact per version; baking a CI-profile
+config into it contradicts that, and committing generated output disguises it as source. (Origin: found in the npm and
+Elixir implementations simultaneously — `npm pack` shipped `dist/resources/ci/` because it sat inside the `files:
+["dist"]` allowlist, and `mix hex.build` shipped `priv/resources/ci/` while `priv/resources/` wasn't gitignored at
+all. The Python implementation was clean by construction — its wheel packages only `src/` — which is what surfaced the
+contrast. See `report.md` Round 8 item 37.)
 
 ## 7. Test pyramid
 

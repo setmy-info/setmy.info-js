@@ -1,64 +1,64 @@
 {
-  "name": "node-monorepo-demo",
-  "version": "1.0.0",
-  "description": "Monorepo Demo",
-  "license": "MIT",
-  "private": true,
-  "packageManager": "npm@10.9.2",
-  "keywords": [
-    "Keyword"
-  ],
-  "author": "Imre Tabur <imre.tabur@mail.ee>",
-  "type": "module",
-  "engines": {
-    "node": ">=24.0.0"
-  },
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "bootstrap": "npm ci",
-    "clean": "node ./tools/run-workspaces.js clean",
-    "server": "node ./tools/http-server.js",
-    "stop-server": "node ./tools/http-server.js stop",
-    "validate": "node ./tools/run-workspaces.js validate",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "lint": "eslint tools && node ./tools/run-workspaces.js lint",
-    "resources": "node ./tools/run-workspaces.js resources",
-    "build": "node ./tools/run-workspaces.js build",
-    "test": "node --test tools/test/unit/*.test.js && node ./tools/run-workspaces.js test",
-    "pre-integration-test": "node ./tools/run-workspaces.js pre-integration-test",
-    "integration-test": "node --test tools/test/integration/*.test.js && node ./tools/run-workspaces.js integration-test",
-    "post-integration-test": "node ./tools/run-workspaces.js post-integration-test",
-    "pre-e2e-test": "node ./tools/run-workspaces.js pre-e2e-test",
-    "e2e-test": "node ./tools/run-workspaces.js e2e-test",
-    "post-e2e-test": "node ./tools/run-workspaces.js post-e2e-test",
-    "coverage": "node ./tools/run-workspaces.js coverage",
-    "security": "npm audit",
-    "verify": "node ./tools/run-workspaces.js verify",
-    "package": "node ./tools/run-workspaces.js package",
-    "sbom": "node ./tools/run-workspaces.js sbom",
-    "sign": "node ./tools/run-workspaces.js sign",
-    "install-local": "node ./tools/run-workspaces.js install-local",
-    "publish": "node ./tools/run-workspaces.js publish",
-    "deploy": "node ./tools/run-workspaces.js deploy",
-    "docs": "node ./tools/run-workspaces.js docs",
-    "site": "node ./tools/run-workspaces.js site && node ./tools/aggregate-site.js",
-    "changeset": "changeset",
-    "changeset:status": "changeset status",
-    "changeset:version": "changeset version"
-  },
-  "devDependencies": {
-    "@changesets/cli": "^2.31.1",
-    "@types/node": "^24.13.3",
-    "esbuild": "^0.28.1",
-    "eslint": "^10.7.0",
-    "eslint-plugin-security": "^4.0.1",
-    "globals": "^16.4.0",
-    "jsdoc": "^4.0.5",
-    "prettier": "^3.9.5",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.64.0"
-  }
+    "name": "node-monorepo-demo",
+    "version": "1.0.0",
+    "description": "Monorepo Demo",
+    "license": "MIT",
+    "private": true,
+    "packageManager": "npm@10.9.2",
+    "keywords": [
+        "Keyword"
+    ],
+    "author": "Imre Tabur <imre.tabur@mail.ee>",
+    "type": "module",
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "workspaces": [
+        "packages/*"
+    ],
+    "scripts": {
+        "bootstrap": "npm ci",
+        "clean": "node ./tools/run-workspaces.js clean",
+        "server": "node ./tools/http-server.js",
+        "stop-server": "node ./tools/http-server.js stop",
+        "validate": "node ./tools/run-workspaces.js validate",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "lint": "eslint tools && node ./tools/run-workspaces.js lint",
+        "resources": "node ./tools/run-workspaces.js resources",
+        "build": "node ./tools/run-workspaces.js build",
+        "test": "node --test tools/test/unit/*.test.js && node ./tools/run-workspaces.js test",
+        "pre-integration-test": "node ./tools/run-workspaces.js pre-integration-test",
+        "integration-test": "node --test tools/test/integration/*.test.js && node ./tools/run-workspaces.js integration-test",
+        "post-integration-test": "node ./tools/run-workspaces.js post-integration-test",
+        "pre-e2e-test": "node ./tools/run-workspaces.js pre-e2e-test",
+        "e2e-test": "node ./tools/run-workspaces.js e2e-test",
+        "post-e2e-test": "node ./tools/run-workspaces.js post-e2e-test",
+        "coverage": "node ./tools/run-workspaces.js coverage",
+        "security": "npm audit",
+        "verify": "node ./tools/run-workspaces.js verify",
+        "package": "node ./tools/run-workspaces.js package",
+        "sbom": "node ./tools/run-workspaces.js sbom",
+        "sign": "node ./tools/run-workspaces.js sign",
+        "install-local": "node ./tools/run-workspaces.js install-local",
+        "publish": "node ./tools/run-workspaces.js publish",
+        "deploy": "node ./tools/run-workspaces.js deploy",
+        "docs": "node ./tools/run-workspaces.js docs",
+        "site": "node ./tools/run-workspaces.js site && node ./tools/aggregate-site.js",
+        "changeset": "changeset",
+        "changeset:status": "changeset status",
+        "changeset:version": "changeset version"
+    },
+    "devDependencies": {
+        "@changesets/cli": "^2.31.1",
+        "@types/node": "^24.13.3",
+        "esbuild": "^0.28.1",
+        "eslint": "^10.7.0",
+        "eslint-plugin-security": "^4.0.1",
+        "globals": "^16.4.0",
+        "jsdoc": "^4.0.5",
+        "prettier": "^3.9.5",
+        "typescript": "^6.0.3",
+        "typescript-eslint": "^8.64.0"
+    }
 }

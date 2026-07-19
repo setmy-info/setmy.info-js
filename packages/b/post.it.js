@@ -4,14 +4,14 @@ import { fileURLToPath } from "node:url";
 
 const workspaceDir = path.dirname(fileURLToPath(import.meta.url));
 const serverToolPath = path.join(
-  workspaceDir,
-  "..",
-  "..",
-  "tools",
-  "http-server.js",
+    workspaceDir,
+    "..",
+    "..",
+    "tools",
+    "http-server.js",
 );
 
 execFileSync(process.execPath, [serverToolPath, "stop", "--port", "43232"], {
-  cwd: workspaceDir,
-  stdio: "inherit",
+    cwd: workspaceDir,
+    stdio: "inherit",
 });

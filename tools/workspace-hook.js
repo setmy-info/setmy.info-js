@@ -5,18 +5,18 @@ import { pathToFileURL } from "node:url";
 import { getWorkspaceInfo } from "./workspace-utils.js";
 
 export async function runWorkspaceHook(fileName, stageLabel) {
-  const workspace = getWorkspaceInfo();
-  const hookPath = path.join(workspace.workspace, fileName);
+    const workspace = getWorkspaceInfo();
+    const hookPath = path.join(workspace.workspace, fileName);
 
-  console.log(`${stageLabel} for ${workspace.packageName}`);
+    console.log(`${stageLabel} for ${workspace.packageName}`);
 
-  if (!fs.existsSync(hookPath)) {
-    return;
-  }
+    if (!fs.existsSync(hookPath)) {
+        return;
+    }
 
-  const hookModule = await import(pathToFileURL(hookPath).href);
+    const hookModule = await import(pathToFileURL(hookPath).href);
 
-  if (typeof hookModule.default === "function") {
-    await hookModule.default(workspace);
-  }
+    if (typeof hookModule.default === "function") {
+        await hookModule.default(workspace);
+    }
 }

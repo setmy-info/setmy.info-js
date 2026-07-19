@@ -1,4 +1,4 @@
 {
-  "apiBaseUrl": "https://prelive.api.setmy.info",
-  "logLevel": "warn"
+    "apiBaseUrl": "https://prelive.api.setmy.info",
+    "logLevel": "warn"
 }

@@ -4,19 +4,19 @@ import assert from "node:assert/strict";
 const baseUrl = "http://127.0.0.1:43332";
 
 test("e2e server serves the web page against the running instance", async () => {
-  const response = await fetch(`${baseUrl}/`);
-  const body = await response.text();
+    const response = await fetch(`${baseUrl}/`);
+    const body = await response.text();
 
-  assert.equal(response.status, 200);
-  assert.match(body, /Module C web example/);
-  assert.match(body, /dist\/index\.min\.js/);
+    assert.equal(response.status, 200);
+    assert.match(body, /Module C web example/);
+    assert.match(body, /dist\/index\.min\.js/);
 });
 
 test("e2e server serves the built browser artifact", async () => {
-  const response = await fetch(`${baseUrl}/dist/index.min.js`);
-  const body = await response.text();
+    const response = await fetch(`${baseUrl}/dist/index.min.js`);
+    const body = await response.text();
 
-  assert.equal(response.status, 200);
-  assert.match(body, /@demo\/module-c/);
-  assert.match(body, /createMessageFromC/);
+    assert.equal(response.status, 200);
+    assert.match(body, /@demo\/module-c/);
+    assert.match(body, /createMessageFromC/);
 });

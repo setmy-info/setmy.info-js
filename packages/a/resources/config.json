@@ -1,6 +1,6 @@
 {
-  "module": "@demo/module-a",
-  "environment": "${profile}",
-  "apiBaseUrl": "${apiBaseUrl}",
-  "logLevel": "${logLevel}"
+    "module": "@demo/module-a",
+    "environment": "${profile}",
+    "apiBaseUrl": "${apiBaseUrl}",
+    "logLevel": "${logLevel}"
 }

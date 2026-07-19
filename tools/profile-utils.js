@@ -9,12 +9,12 @@ import { rootDir } from "./workspace-utils.js";
 // environment list, one-to-one, with no additional profile names for
 // infra shape, feature state, tenant, debug mode, etc.
 export const CANONICAL_PROFILES = [
-  "local",
-  "dev",
-  "ci",
-  "test",
-  "prelive",
-  "live",
+    "local",
+    "dev",
+    "ci",
+    "test",
+    "prelive",
+    "live",
 ];
 
 // Pure: throws on an invalid profile rather than calling process.exit
@@ -22,28 +22,28 @@ export const CANONICAL_PROFILES = [
 // tools/test/unit/profile-utils.test.js). The CLI-facing caller
 // (tools/resources.js) is responsible for catching and exiting.
 export function requireCanonicalProfile(value) {
-  if (!value) {
-    throw new Error(
-      `Missing profile. Pass --profile <name> or set BUILD_PROFILE. ` +
-        `Allowed values (ADR-0041/ADR-0042): ${CANONICAL_PROFILES.join(", ")}.`,
-    );
-  }
+    if (!value) {
+        throw new Error(
+            `Missing profile. Pass --profile <name> or set BUILD_PROFILE. ` +
+                `Allowed values (ADR-0041/ADR-0042): ${CANONICAL_PROFILES.join(", ")}.`,
+        );
+    }
 
-  if (!CANONICAL_PROFILES.includes(value)) {
-    throw new Error(
-      `Invalid profile "${value}". Only the ADR-0041 canonical environment ` +
-        `names are allowed as profiles (ADR-0042): ${CANONICAL_PROFILES.join(", ")}.`,
-    );
-  }
+    if (!CANONICAL_PROFILES.includes(value)) {
+        throw new Error(
+            `Invalid profile "${value}". Only the ADR-0041 canonical environment ` +
+                `names are allowed as profiles (ADR-0042): ${CANONICAL_PROFILES.join(", ")}.`,
+        );
+    }
 
-  return value;
+    return value;
 }
 
 export function resolveProfileArg(argv) {
-  const flagIndex = argv.indexOf("--profile");
-  const fromFlag = flagIndex !== -1 ? argv[flagIndex + 1] : undefined;
+    const flagIndex = argv.indexOf("--profile");
+    const fromFlag = flagIndex !== -1 ? argv[flagIndex + 1] : undefined;
 
-  return requireCanonicalProfile(fromFlag ?? process.env.BUILD_PROFILE);
+    return requireCanonicalProfile(fromFlag ?? process.env.BUILD_PROFILE);
 }
 
 // Root profiles/<name>.json provides shared defaults; an optional
@@ -53,24 +53,28 @@ export function resolveProfileArg(argv) {
 // environment config in the Node/JS/TS world, and every module already
 // has a JSON parser for free.
 export function resolveProfileProperties(profile, workspaceDir) {
-  const properties = {
-    ...readProfileJson(path.join(rootDir, "profiles", `${profile}.json`)),
-    ...readProfileJson(path.join(workspaceDir, "profiles", `${profile}.json`)),
-  };
+    const properties = {
+        ...readProfileJson(path.join(rootDir, "profiles", `${profile}.json`)),
+        ...readProfileJson(
+            path.join(workspaceDir, "profiles", `${profile}.json`),
+        ),
+    };
 
-  properties.profile = profile;
+    properties.profile = profile;
 
-  return properties;
+    return properties;
 }
 
 function readProfileJson(filePath) {
-  if (!fs.existsSync(filePath)) {
-    return {};
-  }
+    if (!fs.existsSync(filePath)) {
+        return {};
+    }
 
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch (error) {
-    throw new Error(`Invalid profile JSON at ${filePath}: ${error.message}`);
-  }
+    try {
+        return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch (error) {
+        throw new Error(
+            `Invalid profile JSON at ${filePath}: ${error.message}`,
+        );
+    }
 }

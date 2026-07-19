@@ -171,6 +171,7 @@ pipeline {
                     }
                     steps {
                         echo 'Software release publish steps'
+                        sh 'npm run install-local'
                         sh 'npm run publish'
                     }
                 }
@@ -180,6 +181,7 @@ pipeline {
                     }
                     steps {
                         echo 'Software snapshot publish steps'
+                        sh 'npm run install-local'
                         sh 'npm run publish'
                     }
                 }

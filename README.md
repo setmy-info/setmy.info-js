@@ -278,6 +278,17 @@ descriptor with `status: "prepared-not-executed"` — there's no real dev/test/p
 yet, so this is as far as it goes on purpose. Both scripts are meant to be ready to flip on for real (dist-tag/target
 resolution, branch gating, the descriptor shape) without anything actually happening until you say so.
 
+#### `install-local`, repurposed
+
+`npm run install-local` (`tools/install-local.js`) used to be a Maven-ism with no real npm effect (workspace siblings
+are already linked automatically) — `report.md` items 11/20 left its fate open, and the Python/Elixir sides have since
+both implemented the same repurposing this now ports back: install the _packed_ tarball (Package's actual `npm pack`
+output, plus every transitive local-dependency tarball, so a module like `d` resolves its whole `c`→`a`/`b` chain from
+local files with no registry lookup) into a disposable temp project and confirm it imports cleanly. This exercises the
+tarball's own `files`/`exports` rules, which the workspace link silently bypasses — a broken file-inclusion list gets
+caught here, before publish. It runs in the Publish stage (`Jenkinsfile` and `ci-local/lib.sh`, before
+`npm run publish`), same order as both siblings.
+
 ### Test pyramid
 
 - `test/unit/*.test.js` - unit tests against `src/`

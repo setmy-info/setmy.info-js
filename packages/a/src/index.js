@@ -9,7 +9,7 @@
  * @returns {string} The message from module-a.
  */
 export function createMessageFromA() {
-  return "message from module-a";
+    return "message from module-a";
 }
 
 /**
@@ -17,9 +17,9 @@ export function createMessageFromA() {
  * @returns {string} The foo message.
  */
 export function foo() {
-  const message = "foo() from module-a";
-  console.log(message);
-  return message;
+    const message = "foo() from module-a";
+    console.log(message);
+    return message;
 }
 
 /**
@@ -27,8 +27,8 @@ export function foo() {
  * @returns {{module: string, message: string}} The module descriptor.
  */
 export function createDescriptorFromA() {
-  return {
-    module: "a",
-    message: createMessageFromA(),
-  };
+    return {
+        module: "a",
+        message: createMessageFromA(),
+    };
 }

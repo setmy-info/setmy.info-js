@@ -172,13 +172,13 @@ item below, including a combined run of all of them together):
   enforcing ADR-0042's "reviews must reject non-canonical profile names." Worked example:
   `packages/a/resources/config.json`. Read ADR-0041/ADR-0042 first, as asked, before designing this. 6 tests in
   `tools/test/resources.test.js`.
-  - Resolved the naming mismatch this surfaced: `DEPLOY_TARGET`/env flags in both CI files used `testing`, not
-    ADR-0041's canonical `test` — renamed throughout (`DEVELOPMENT_TO_TEST`/`RELEASE_TO_TEST`,
-    `deploy-test` job/stage). `local` and `ci` deliberately have no Deploy target (you don't deploy _to_ a dev machine
-    or _to_ the build environment) — noted, not "fixed," since that's correct as-is.
-  - The `-Pe2e`-vs-ADR-0042 tension noted last round is still open — it's a real ambiguity in the ADRs themselves (is
-    a build-behavior-switching profile "allowed" or not), not something to resolve unilaterally by editing someone
-    else's accepted ADR.
+    - Resolved the naming mismatch this surfaced: `DEPLOY_TARGET`/env flags in both CI files used `testing`, not
+      ADR-0041's canonical `test` — renamed throughout (`DEVELOPMENT_TO_TEST`/`RELEASE_TO_TEST`,
+      `deploy-test` job/stage). `local` and `ci` deliberately have no Deploy target (you don't deploy _to_ a dev machine
+      or _to_ the build environment) — noted, not "fixed," since that's correct as-is.
+    - The `-Pe2e`-vs-ADR-0042 tension noted last round is still open — it's a real ambiguity in the ADRs themselves (is
+      a build-behavior-switching profile "allowed" or not), not something to resolve unilaterally by editing someone
+      else's accepted ADR.
 - **Running-instance pattern extended to `b`/`c`/`d`.** Each now has its own `config.server` port, `web/index.html`, the
   four hook files, and
   `test/e2e/server.e2e.test.js` — same pattern as `a`, verified with all four servers running (and stopping) on distinct
@@ -664,3 +664,152 @@ What this adds to the proposal list above:
 12. **The `test` script lying about what it runs** (a manual eyeball-the-console smoke check, not an assertion-based
     test) is a real-world illustration of exactly why §1.2 ("a phase name MUST mean what a Maven-fluent developer
     expects") matters — this is the concrete failure mode that rule exists to prevent, not an abstract concern.
+
+## Round 8: cross-language review — JS vs Python vs Elixir (findings + suggestions only)
+
+Date: 2026-07-19
+
+Full re-review of all three reference implementations (`setmy.info-js`, `setmy.info-python`, `setmy.info-elixir`)
+against each other, against `requirements-rules.md`/ADR-0045, and against what earlier rounds and mid-session
+instructions said would be done. Lens: things that were **planned or explicitly asked for but not implemented (or not
+implemented consistently/correctly)**. Nothing was changed in this round — findings and suggestions only, same
+append-only convention as Round 4. Numbering continues the global sequence (last used: 33).
+
+34. **Profiles format: this repo is now the only JSON hold-out, against an explicit instruction and two worked
+    precedents.** During the Python build the instruction was direct: YAML is the more-used format, refactor to it —
+    and both `setmy.info-python` (`profiles/*.yaml`, `resources/config.yaml`) and `setmy.info-elixir`
+    (`profiles/*.yaml`) now use YAML, backed by real org precedent (`python-commons` ships PyYAML;
+    `python-start-project` uses `application.yaml`). This repo still has `profiles/*.json` and
+    `packages/a/resources/config.json`, and §6.3 currently _rationalizes_ that ("JSON is the natural choice in the
+    Node/JS/TS world"). Either position is defensible; holding both at once is not. Suggest: **refactor this repo's
+    profiles (and the module-a resources example) to YAML** for org-wide consistency — noting the honest cost that
+    Node has no stdlib YAML parser, so this adds a runtime dep (`yaml` or `js-yaml`) to `tools/`, which is exactly why
+    JSON was chosen originally; if instead JSON is deliberately reaffirmed, §6.3 should say the org's cross-language
+    default is YAML and record why the npm implementation alone deviates.
+35. **`install-local`: the "undecided" decision has since been decided — twice — and this repo never caught up.**
+    Items 11 and 20 left `install-local`'s fate open (repurpose into a packed-tarball consumer test vs documented
+    no-op, and it runs nowhere in CI). Since then both siblings implemented the repurposing for real and it caught
+    real bugs: Python's `install_local.py` installs the built wheel + transitive local-dep wheels into a throwaway
+    venv (found the module-`c` sibling-resolution bug), Elixir's `Mix.Tasks.InstallLocal` does the same with Hex
+    `.tar`s into a scratch Mix project (and surfaced the `:erl_tar` checksum incompatibility). Both siblings also run
+    the phase in CI (`stage_publish` in their `ci-local/lib.sh`, before publish). This repo's `tools/install-local.js`
+    is still the no-effect `npm install --no-save` Maven-ism, and neither `Jenkinsfile` nor `ci-local/` runs it.
+    Suggest: **close items 11/20 by porting the siblings' repurposing back** — install the `npm pack` tarball into a
+    temp project and import it (catches broken `files`/`exports` before publish, the exact failure class item 23's
+    missing-LICENSE finding lives in), then add it to the Publish stage in `Jenkinsfile` + `ci-local/lib.sh` to match
+    both siblings.
+36. **Security phase: item 21's flag mismatch is still live, and CI runs the looser variant.** Root `security` script
+    is `npm audit` (dev deps included) — that's what `Jenkinsfile` and `ci-local` actually run; per-module
+    `tools/security.js` is `npm audit --omit=dev`. Two policies under one phase name, with the stricter-scoped one
+    never running in CI. Both siblings also converged on root-level-only dependency auditing (Python:
+    one `pip-audit` for the one shared venv; Elixir: one `mix deps.audit` for the one shared `mix.lock`) — and the
+    same logic applies here: npm workspaces has one root lockfile, so per-module `npm audit` fan-out is N copies of
+    the same audit. Suggest: **pick one flag policy, make `security` root-level-only, and drop the per-module
+    fan-out** (the per-module `security-report.js` site copy can keep reading the root audit's output).
+37. **Filtered resources leak into published artifacts — here and in Elixir (Python is clean).** This repo:
+    `tools/resources.js` writes to `packages/<m>/dist/resources/<profile>/`, and `files: ["dist", "README.md"]` means
+    `npm pack` ships whatever profile was filtered last — in CI that's `ci`, so the published tarball carries
+    CI-environment config baked in. Elixir: same class of bug, worse — `mix resources` writes to
+    `apps/<app>/priv/resources/<profile>/`, which is (a) inside the Hex package file set (confirmed in the actual
+    `mix hex.build` output listing: `priv/resources/ci` is in `setmy_info_demo_module_a-1.0.0.tar`) **and** (b) not
+    gitignored, so generated output would be committed as if it were source. Python is clean by construction: the
+    wheel packages only `src/`, and `dist/` is gitignored. Suggest: **exclude filtered-resources output from the
+    published artifact in both repos** (here: move the output out of `dist/` or exclude it via `files`; Elixir:
+    gitignore `priv/resources/` and exclude it from the package `files`), and **add a rule to §6**: profile-filtered
+    output MUST NOT be included in published artifacts and MUST be VCS-ignored — an environment-specific artifact
+    contradicts publishing one environment-neutral package per version.
+38. **ADR-0045 drifted from the implementations it claims to describe — three cells.** (a) The Python Bootstrap cell
+    still describes `requirements-dev.txt` + a manual topological editable-install loop; that was replaced (on
+    explicit instruction — the org's `pip install -r requirements.txt` standard) by a single `requirements.txt` with
+    `-e` entries and no manual loop, per `setmy.info-python/report.md` Round 2. The asked-for change landed in code
+    and in that repo's README, but the ADR cell was never re-synced. (b) The Python Process Resources cell says the
+    substitution scheme was "ported line-for-line" from the npm column without mentioning the YAML profile format —
+    while the new Elixir cell explicitly cites "the Python column's own YAML choice", pointing at a statement the
+    Python column doesn't actually make. (c) The npm Docs cell claims "no standalone script", but root `package.json`
+    has had a `docs` script since the site work. Suggest: sync all three cells; (a) is the important one — it
+    describes a bootstrap design that no longer exists.
+39. **Round 7's stale-`ci.yml`-reference scrub was itself incomplete.** Item 32 claimed `requirements-rules.md` was
+    updated to stop describing `ci.yml` as a present, working file, but two present-tense references survived:
+    §3-something at line ~138 ("`Jenkinsfile`/`ci.yml` both already do it") and §3.15's origin note at line ~211
+    ("`ci.yml` Deploy jobs and Tag **now spell out** `needs...`"). Same lesson as Round 7's own drift finding: claims
+    of a doc sync need the same re-verification as claims of a code fix. Suggest: reword both to past tense / "the
+    deleted `ci.yml`".
+40. **`tools/bootstrap.js` is still dead code** (item 18, unresolved). Both siblings have exactly one real bootstrap
+    entry point each (`scripts/bootstrap.py`; `mix deps.get`). Suggest: delete it — the root `bootstrap` script
+    calling `npm ci` directly _is_ this repo's bootstrap, and a file nothing references is a trap for the next
+    reader.
+41. **Backlog items left stale by `ci.yml`'s deletion.** Item 6 (Windows matrix leg verification) and the
+    Pages-artifact half of item 12 (site link layout "in the current Pages artifact layout") describe a workflow that
+    no longer exists. Suggest: mark item 6 moot-until-rebuild, re-scope item 12 to the local `site/` output only —
+    cheaper than letting a future reader chase references into a deleted file. Items 22 (`packageManager:
+"npm@10.9.2"` still stale vs the npm 11.x actually in use), 23 (no per-module LICENSE in the packed tarball —
+    verified still true), and 27 (the demo changeset `.changeset/module-a-resources-demo.md` still pending —
+    verified still present) all remain open and unchanged.
+42. **Report-numbering conventions silently diverged across the three repos.** This file uses one global sequence
+    (1–33, now –42); `setmy.info-elixir/report.md` starts fresh per repo (1–17, reasonable); but
+    `setmy.info-python/report.md` numbers its first bug list 1–7 and then numbers its Round 2 item "34." — which
+    continues _this_ repo's sequence, not its own, and is almost certainly an accidental carry-over. Suggest: renumber
+    the Python Round 2 item to "8." (its own sequence), and state the convention once: numbering is per-repo.
+43. **What held up well, for the record** (so this round isn't read as "everything drifted"): item 16's `fileExists`
+    fix is live in `Jenkinsfile`; item 17's tools-test decoupling is real (`http-server.test.js` now builds its own
+    temp fixture, no `packages/a` references); coverage is correctly unit-scoped in all three repos (and Elixir's
+    report documents _why_ its bare `mix coveralls` had to be scoped); the four-branch `ci-local` verification
+    discipline was applied identically in all three repos; and the §9 typed/untyped coexistence pattern (one typed
+    module, presence-signal opt-in: `src/index.ts` / `[tool.mypy]` / `:dialyzer` key) is implemented consistently
+    across all three languages.
+
+## Round 9: Round 8 findings resolved (per explicit per-item decisions)
+
+Date: 2026-07-19
+
+Every item below implements a decision made on the Round 8 findings: 34 decided (JSON stays for JS), 35/36/37/38/39
+approved for fixing. Everything was verified by running it, ending with a full clean `./ci-local/run.sh develop` pass
+(EXIT 0). Items 40-42 were not picked and stay open.
+
+- **34 — decided, not changed: JS keeps JSON profiles; YAML is the org default for other languages.** §6.3 rewritten
+  to record this as an explicit decision instead of a rationalization: the org's cross-language default profile format
+  is YAML (Python/Elixir implementations, real org precedent), and the npm implementation alone deliberately deviates
+  because Node has no stdlib YAML parser and switching would add a third-party runtime dependency to `tools/` for zero
+  functional gain. A new language implementation SHOULD default to YAML and record its reasoning if it deviates.
+- **35 — implemented: `install-local` repurposed into the packed-tarball consumer check, and wired into CI.** Items
+  11/20 closed. `tools/install-local.js` rewritten (ported from the Python/Elixir worked implementations): finds the
+  module's `npm pack` tarball in `.artifacts/`, walks `localDependencies` transitively and collects every local
+  sibling's tarball too, installs them all in one `npm install --ignore-scripts` into a disposable temp project
+  (created in the OS temp dir, cleaned in a `finally` — deliberately _not_ inside `.artifacts/`, the exact location
+  that caused the Python side's publish-glob bug and the Elixir side's sign-glob bug), then confirms the package
+  imports by name. Verified for all four modules: `d` resolved its whole 3-tarball local chain (`c` → `a`+`b`) with
+  no registry lookup. Added to both `Jenkinsfile` Publish stages and `ci-local/lib.sh`'s `stage_publish`, before
+  `npm run publish` — the same order both siblings already use. README's Publish/Deploy section documents the
+  repurposing.
+- **36 — implemented: one security policy, root-level only.** The phase had three different audit variants: the root
+  `security` script ran `npm audit` (dev deps included — the one CI actually ran), the per-module `tools/security.js`
+  ran `npm audit --omit=dev` (verified: _nothing_ ever invoked it — the root script called `npm audit` directly, not
+  the per-module fan-out), and the site's `security-report.js` ran a third (`--omit=dev --json`, once per module
+  against the same root lockfile). Resolution: audit-everything at the root is the policy — it matches what CI already
+  ran, and it matches both siblings (Python's `pip-audit` audits the whole venv, which is how it caught the real
+  pytest CVE — a dev dependency; Elixir's `mix deps.audit` audits the whole shared `mix.lock`). Deleted the dead
+  `tools/security.js`, removed the four modules' `security` script entries, and dropped `--omit=dev` from
+  `security-report.js` so the informational report shows the same scope the gate checks.
+- **37 — implemented here and in `setmy.info-elixir`; new spec rule §6.6.** Here: `"!dist/resources"` added to all
+  four modules' `files` arrays — verified with `dist/resources/ci/` actually present on disk that `npm pack --dry-run`
+  now lists only the four dist files + README + package.json. Elixir: explicit package `files:` allowlist in
+  `demo_module_a`/`demo_module_b`'s `mix.exs` (re-verified via `mix package` tarball listing), `**/priv/resources/`
+  gitignore rule, and a `git rm --cached` for the generated file that had already been committed — two real git traps
+  surfaced while verifying that last part (mid-path-slash gitignore anchoring; tracked files being exempt from
+  gitignore entirely), both documented in `setmy.info-elixir/report.md` Round 2 item 18. New rule
+  `requirements-rules.md` §6.6: profile-filtered output MUST NOT be included in a published artifact and MUST be
+  VCS-ignored.
+- **38 — implemented: three stale ADR-0045 cells synced to reality** (decision: fix the ADR to match the current,
+  good-enough implementations — no code changes). Python Bootstrap cell now describes the real single
+  `pip install -r requirements.txt` bootstrap (the org standard) instead of the removed `requirements-dev.txt` +
+  manual topological loop; Python Process Resources cell now states the YAML profile format explicitly (which the
+  Elixir cell was already citing); npm Docs cell no longer claims "no standalone script" (root `npm run docs` exists).
+- **39 — implemented: the two surviving present-tense `ci.yml` references in `requirements-rules.md` reworded** (§3.8's
+  origin note and §3.15's origin note) to past tense/"now-deleted", completing Round 7's scrub for real this time.
+- **Incidental, found by this round's verification run:** `npm run format:check` failed repo-wide on files this round
+  never touched — the committed `.editorconfig` (commit `e5ceb7d`, part of the recent "Format" commits) sets
+  `indent_size = 4`, which Prettier honors, but several committed files still carried the older 2-space style, and no
+  full `format:check` had run since that commit landed. Resolved by running the repo's own `npm run format` once
+  (whole repo, brings everything in line with the committed config) — after which the full `./ci-local/run.sh develop`
+  pipeline passed clean end to end, including the new install-local step ("imports cleanly from its packed tarball"
+  for all four modules) in Publish/Snapshot.

@@ -120,11 +120,14 @@ stage_package() {
 }
 
 # $1: "Release" or "Snapshot" (label only, matches the Jenkinsfile stage
-# names) - both run the same npm command, BRANCH_NAME (set by the caller)
-# is what makes tools/publish.js resolve the right dist-tag.
+# names) - both run the same npm commands, BRANCH_NAME (set by the caller)
+# is what makes tools/publish.js resolve the right dist-tag. install-local
+# (the packed-tarball consumer check, report.md item 35) runs before
+# publish, same order as the Python/Elixir sides' stage_publish.
 stage_publish() {
   step "Publish / $1"
   echo "Software $1 publish steps"
+  npm run install-local || return $?
   npm run publish || return $?
 }
 

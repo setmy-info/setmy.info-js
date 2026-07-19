@@ -6,5 +6,5 @@ import { npmCommand } from "./workspace-utils.js";
 
 console.log("Running workspace bootstrap via npm ci");
 execSync(`${npmCommand} ci`, {
-  stdio: "inherit",
+    stdio: "inherit",
 });

@@ -12,9 +12,9 @@ console.log(`Cleaning workspace: ${workspace.packageName}`);
 console.log(`Location: ${workspace.workspace}`);
 
 for (const target of targets) {
-  const dir = path.join(workspace.workspace, target);
-  removeDirectory(dir);
-  console.log(`Removed ${dir}`);
+    const dir = path.join(workspace.workspace, target);
+    removeDirectory(dir);
+    console.log(`Removed ${dir}`);
 }
 
 console.log("Clean completed");

@@ -10,23 +10,23 @@ const siteDir = path.join(rootDir, "site");
 const workspaces = getWorkspaces();
 
 const links = workspaces
-  .filter((workspace) =>
-    fs.existsSync(path.join(workspace.workspace, "site", "index.html")),
-  )
-  .map((workspace) => {
-    const relativePath = path.relative(
-      siteDir,
-      path.join(workspace.workspace, "site", "index.html"),
-    );
+    .filter((workspace) =>
+        fs.existsSync(path.join(workspace.workspace, "site", "index.html")),
+    )
+    .map((workspace) => {
+        const relativePath = path.relative(
+            siteDir,
+            path.join(workspace.workspace, "site", "index.html"),
+        );
 
-    return `<li><a href="${relativePath}">${workspace.packageName}</a></li>`;
-  })
-  .join("\n");
+        return `<li><a href="${relativePath}">${workspace.packageName}</a></li>`;
+    })
+    .join("\n");
 
 writePage(
-  path.join(siteDir, "index.html"),
-  "node-monorepo-demo - project site",
-  `<p>Modules:</p>
+    path.join(siteDir, "index.html"),
+    "node-monorepo-demo - project site",
+    `<p>Modules:</p>
    <ul>${links}</ul>`,
 );
 

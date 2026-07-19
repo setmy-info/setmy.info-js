@@ -1,4 +1,4 @@
 {
-  "apiBaseUrl": "https://api.setmy.info",
-  "logLevel": "warn"
+    "apiBaseUrl": "https://api.setmy.info",
+    "logLevel": "warn"
 }
