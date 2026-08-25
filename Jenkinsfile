@@ -1,5 +1,7 @@
 pipeline {
 
+    // version 1.1.0 - hotfix* branch support (Publish/Hotfix candidate stage, HOTFIX_TO_* deploy
+    //                 flags, jenkinsfile-starter 1.1.0), dead MASTER_TO_PRELIVE flag removed
     // version 1.0.0 - migrated from jenkinsfile-starter for setmy.info-js (npm/node monorepo)
     // Maven placeholders from the starter are replaced with real npm lifecycle
     // scripts (see README.md / temp.md for the full Maven <-> npm phase mapping).
@@ -27,7 +29,6 @@ pipeline {
 
         MASTER_TO_LIVE = 'DEPLOY'
 
-        MASTER_TO_PRELIVE = 'DEPLOY'
         RELEASE_TO_PRELIVE = 'DEPLOY'
 
         // "TEST", not "TESTING" - ADR-0041's canonical environment name.
@@ -36,6 +37,14 @@ pipeline {
 
         DEVELOPMENT_TO_DEV = 'DEPLOY'
         RELEASE_TO_DEV = 'DEPLOY'
+
+        // hotfix* - branched from master, one fix, quick review + the FULL
+        // automated test path (nothing is skipped), merged to master, which
+        // then deploys live and tags. A hotfix reaches the same
+        // pre-production targets a release does and never goes live directly.
+        HOTFIX_TO_PRELIVE = 'DEPLOY'
+        HOTFIX_TO_TEST = 'DEPLOY'
+        HOTFIX_TO_DEV = 'SKIP'
     }
 
     stages {
@@ -185,6 +194,16 @@ pipeline {
                         sh 'npm run publish'
                     }
                 }
+                stage('Hotfix candidate') {
+                    when {
+                        expression { env.BRANCH_NAME.startsWith('hotfix') }
+                    }
+                    steps {
+                        echo 'Software hotfix-candidate publish steps'
+                        sh 'npm run install-local'
+                        sh 'npm run publish'
+                    }
+                }
                 stage('Release reports') {
                     when {
                         branch 'master'
@@ -210,7 +229,8 @@ pipeline {
                     when {
                         expression {
                             (env.DEVELOPMENT_TO_DEV == 'DEPLOY' && env.BRANCH_NAME.startsWith('devel')) ||
-                            (env.RELEASE_TO_DEV == 'DEPLOY' && env.BRANCH_NAME.startsWith('release'))
+                            (env.RELEASE_TO_DEV == 'DEPLOY' && env.BRANCH_NAME.startsWith('release')) ||
+                            (env.HOTFIX_TO_DEV == 'DEPLOY' && env.BRANCH_NAME.startsWith('hotfix'))
                         }
                     }
                     steps {
@@ -222,7 +242,8 @@ pipeline {
                     when {
                         expression {
                             (env.DEVELOPMENT_TO_TEST == 'DEPLOY' && env.BRANCH_NAME.startsWith('devel')) ||
-                            (env.RELEASE_TO_TEST == 'DEPLOY' && env.BRANCH_NAME.startsWith('release'))
+                            (env.RELEASE_TO_TEST == 'DEPLOY' && env.BRANCH_NAME.startsWith('release')) ||
+                            (env.HOTFIX_TO_TEST == 'DEPLOY' && env.BRANCH_NAME.startsWith('hotfix'))
                         }
                     }
                     steps {
@@ -233,7 +254,8 @@ pipeline {
                 stage('prelive') {
                     when {
                         expression {
-                            env.RELEASE_TO_PRELIVE == 'DEPLOY' && env.BRANCH_NAME.startsWith('release')
+                            (env.RELEASE_TO_PRELIVE == 'DEPLOY' && env.BRANCH_NAME.startsWith('release')) ||
+                            (env.HOTFIX_TO_PRELIVE == 'DEPLOY' && env.BRANCH_NAME.startsWith('hotfix'))
                         }
                     }
                     steps {

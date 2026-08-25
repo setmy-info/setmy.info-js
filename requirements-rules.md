@@ -96,18 +96,25 @@ checkstyle` — the report goal — doesn't):
 
 ## 3. Branching and CI gating
 
-3.1. Branch names in use: `master`, `devel*`, `release*`, and unrestricted feature branch names (anything else).
+3.1. Branch names in use: `master`, `devel*`, `release*`, `hotfix*`, and unrestricted feature branch names (anything
+else). A `hotfix*` branch is branched from `master`, carries one fix, gets a quick review plus the _full_ automated
+test path (nothing is skipped — "quick" is the human review, never the pipeline), and is merged back to `master`,
+whose own build then deploys live and tags. (Added 2026-08-25; the `jenkinsfile-starter` template supports it since
+its 1.1.0.)
 
 3.2. Every branch, including feature branches, MUST run phases 1-19 (everything through Package) on every push. This is
 the actual point of the branching model: a developer on a feature branch gets full build/ lint/test/quality feedback
 without needing a reviewer or a merge first.
 
-3.3. Publish (phase 20), Deploy (phase 21), and any release-tagging step MUST be gated to `master`/`devel*`/`release*`
-only, and MUST NOT run on arbitrary feature branches.
+3.3. Publish (phase 20), Deploy (phase 21), and any release-tagging step MUST be gated to
+`master`/`devel*`/`release*`/`hotfix*` only, and MUST NOT run on arbitrary feature branches. `hotfix*` MUST NOT deploy to
+`live` and MUST NOT tag — only its merge to `master` does that.
 
 3.4. `master` builds MUST use the `release` dist-tag/channel semantics;
 `devel*` builds MUST use a `snapshot`/pre-release channel; `release*`
-builds MUST use a `release-candidate`-equivalent channel. See the npm implementation's `tools/publish.js` branch →
+builds MUST use a `release-candidate`-equivalent channel; `hotfix*` builds MUST publish on their own
+candidate channel (npm dist-tag `hotfix`; PEP 440 `rcN` like a release, since it has no tags) so the exact build under
+review can be installed, and MUST NOT publish as the release channel. See the npm implementation's `tools/publish.js` branch →
 dist-tag mapping for the exact string choices; a Python/Elixir implementation MAY choose different channel names but
 MUST preserve the three-way distinction.
 
@@ -155,16 +162,16 @@ was found and fixed once already in the npm implementation's now-deleted `ci.yml
 MAY be a placeholder (e.g. an `echo`) until real notification infrastructure (email/Slack/etc.)
 exists, but the step itself, and the success/failure branching, MUST be present, not silently absent.
 
-3.11. A set of local emulation scripts SHOULD exist, one per branch case from §3.1 (a "feature/other" catch-all,
-`devel*`, `release*`, `master`), that run the exact same commands the CI pipeline definition (§3.7) runs, in the same
-order, with the same branch-gating outcome for that case — so a developer can reproduce a CI run on their own machine
-without the CI tool itself installed. These MUST derive their branch-gating logic from the actual pipeline definition's
-conditions, not be a separate hand-maintained copy that can drift from what CI actually does — treat a mismatch between
-an emulation script and the pipeline definition as a bug in the emulation script. Use the ecosystem's most portable
-scripting option available (a POSIX shell script needs nothing installed beyond a shell; reach for something more
-powerful only if the pipeline definition itself needs logic a POSIX shell script genuinely can't express). (Reference:
-`ci-local/*.sh` in the npm implementation — POSIX `sh`, one script per case plus a dispatcher that picks a case from a
-branch name.)
+3.11. A way to reproduce a CI run locally, without the CI tool installed, SHOULD exist — same commands, same order,
+same branch-gating outcome per branch case (§3.1). **It MUST NOT be a hand-maintained copy of the pipeline definition's
+stage order and gating logic in a second language.** The npm/Python/Elixir implementations each carried exactly such a
+copy (`ci-local/*.sh`, POSIX `sh`, one script per branch case) from 2026-07 until 2026-08-25, and it did drift-by-
+duplication as predicted: adding the `hotfix*` branch case (§3.1) meant writing the same gating logic four times, once
+per `Jenkinsfile` and once per shell copy, in three repos. They were removed. The replacement, decided but not yet
+built, is a **single small Groovy runner, shared across the language implementations, that reads the real
+`Jenkinsfile` and executes its `stages`/`steps`/`when` closures locally** — one source of truth, so a pipeline change
+cannot silently fail to reach the emulator. Until it exists, a repo MAY have no local emulation at all; what it MUST
+NOT have is a divergent second definition.
 
 3.12. **On a CI tool whose pipeline definition is a job DAG rather than Jenkins-style sequential stages (e.g. GitHub
 Actions), every job in the Deploy stage MUST depend on ALL of the Publish stage's jobs having finished (success or
@@ -483,13 +490,13 @@ concrete, working answer to
 
 **`.github/workflows/ci.yml` has been deleted** (see `report.md`) after repeated DAG-specific bugs, pending a deliberate
 rebuild — the `ci.yml` cells below describe what it did while it existed and what a rebuild must satisfy again, not a
-file currently in the repo. `Jenkinsfile` and `ci-local/` remain live and unaffected.
+file currently in the repo. `Jenkinsfile` remains live and unaffected.
 
 | Requirement                                       | npm implementation                                                                                                                                                                                                                                                                                                                           |
 | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | §2 phases                                         | `package.json` `scripts` block, one entry per phase, `tools/*.js` doing the actual work, `tools/run-workspaces.js` fanning a phase out across all modules in topological order                                                                                                                                                               |
 | §3 branch gating, pipeline shape (§3.7-3.10)      | `Jenkinsfile` (Jenkins declarative `when`/`expression`, `Inspection`/`Preparation`/`Build`/.../`Tag` stages, `post { always {} success {} failure {} }`) and `.github/workflows/ci.yml` (`if:` on `github.ref_name`, matching jobs, `notify` job)                                                                                            |
-| §3.11 local CI emulation                          | `ci-local/{feature,devel,release,master}-branch.sh` + `ci-local/run.sh` dispatcher + `ci-local/lib.sh` shared stages — POSIX `sh`, branch-gating logic read directly off `Jenkinsfile`'s `when` conditions                                                                                                                                   |
+| §3.11 local CI emulation                          | None at present — the `ci-local/*.sh` copies were removed 2026-08-25 (they duplicated `Jenkinsfile`'s gating in a second language); replacement is a planned shared Groovy runner that reads `Jenkinsfile` itself                                                                                                                            |
 | §3.12 Publish-before-Deploy barrier (DAG CI only) | `ci.yml`'s `publish-complete` job (`needs:` all four Publish jobs, `if: always()`, fails on any real Publish failure) in every `deploy-*` job's `needs:` — not needed in `Jenkinsfile`, which gets the ordering for free from Jenkins' sequential stages                                                                                     |
 | §3.13 one trigger, not several redundant ones     | `ci.yml` triggers on `push: branches: ["**"]` only, no `pull_request` — not applicable to `Jenkinsfile`, which has no separate PR-vs-push trigger concept                                                                                                                                                                                    |
 | §3.14 branch-name resolution across trigger types | N/A now that `ci.yml` has only one trigger type — `github.ref_name` is always the real branch; not needed in `Jenkinsfile` either, whose multibranch `BRANCH_NAME` already reflects the real source branch regardless of trigger                                                                                                             |

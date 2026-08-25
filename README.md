@@ -79,40 +79,20 @@ GitHub Actions (parallel jobs for Inspection/Publish/Deploy, `if:` conditions on
 Jenkins' `when`/`expression` branch gates, a `publish-complete` barrier job giving Deploy-waits-for-Publish ordering
 that GitHub's job DAG doesn't provide for free the way Jenkins' sequential stages do) but went through several rounds of
 DAG-specific bugs (see `report.md`, Rounds 3/5/6) that kept surfacing after the fact. Rather than keep patching it
-incrementally, it was deleted outright to be rebuilt deliberately later. `Jenkinsfile` and `ci-local/` are the current,
-working CI implementation in the meantime — the rules a future rebuild must satisfy (§3.12-§3.15:
+incrementally, it was deleted outright to be rebuilt deliberately later. `Jenkinsfile` is the current CI implementation in the meantime — the rules a future rebuild must satisfy (§3.12-§3.15:
 Publish-before-Deploy barrier, one trigger not several, ref-derived branch-name resolution, explicit
 `needs.<job>.result` checks) are still recorded in `requirements-rules.md`, since they're general DAG-CI requirements,
 not specific to the deleted file.
 
-### Emulating CI locally, without Jenkins
+### Emulating CI locally, without Jenkins — planned, not present
 
-`ci-local/` runs the exact same npm commands the `Jenkinsfile` runs, in the same order, as plain POSIX `sh` scripts (no
-bashisms — dash/ash-safe, not just bash) — for when you want to reproduce a CI run on your own machine without a Jenkins
-instance. One script per branch case, derived directly from the Jenkinsfile's `when` conditions:
-
-```sh
-ci-local/run.sh                    # picks the case from the current git branch
-ci-local/run.sh some-branch-name   # or pass a branch name explicitly
-
-# ...or run a specific case directly:
-ci-local/feature-branch.sh   # Inspection..Package only, nothing branch-gated
-ci-local/devel-branch.sh     # + Publish/Snapshot, Deploy/dev, Deploy/test
-ci-local/release-branch.sh   # + Deploy/dev, Deploy/test, Deploy/prelive (no Publish - see below)
-ci-local/master-branch.sh    # + Publish/Release, Deploy/live, Tag
-```
-
-`ci-local/lib.sh` holds the shared stage functions every case script sources; it isn't run directly. Same safety
-guarantees as everywhere else: nothing here sets `PUBLISH_EXECUTE=true`, so `npm run publish`
-always stays `--dry-run`, and `npm run deploy` always stays
-"prepared-not-executed."
-
-One thing worth knowing before picking a case: `release-branch.sh`
-faithfully reproduces a real quirk in the Jenkinsfile's own logic, not a bug in the emulation — a `release*` branch name
-doesn't match _either_
-Publish stage's `when` condition (`Release` needs `branch 'master'`
-exactly, `Snapshot` needs `startsWith('devel')`), so real Jenkins runs no Publish stage at all on a release branch, and
-neither does this script.
+The POSIX-`sh` `ci-local/` emulation scripts were **removed** (2026-08-25). They duplicated the `Jenkinsfile`'s stage
+order and branch gating in a second language, which is exactly the drift risk §3.11 warns about — every hotfix-branch
+or phase change had to be made twice, in three repos. The replacement, planned but not built yet, is a **small Groovy
+runner shared by all three repos** that reads the real `Jenkinsfile` (the org `jenkinsfile-starter` shape plus these
+three implementations of it) and executes its `stages`/`steps`/`when` closures locally, so there is one source of
+truth instead of a copy. Until it exists, `Jenkinsfile` is the CI definition and there is no local emulation — run the
+individual lifecycle commands from the "Lifecycle" section above by hand.
 
 Run any single step for one module only:
 
@@ -122,6 +102,16 @@ npm run build
 npm test
 npm run e2e-test
 ```
+
+### Hotfix branches (`hotfix*`)
+
+Since `jenkinsfile-starter` 1.1.0 (ported here as Jenkinsfile 1.1.0), a `hotfix*` branch — branched from `master`,
+one fix, quick review — is a first-class branch case. "Quick" is the human review, never the pipeline: a hotfix runs
+the exact same Inspection → Package path as every branch (all test tiers, quality, packaging), then publishes a
+**hotfix candidate** on its own channel so the exact build under review can be installed, and deploys to `test` and
+`prelive` (`HOTFIX_TO_TEST`/`HOTFIX_TO_PRELIVE`; `HOTFIX_TO_DEV` is `SKIP` by default). It never deploys `live` and
+never tags — merging it to `master` is what does that, through the normal master build. The unused `MASTER_TO_PRELIVE` flag (declared since the starter, read by no stage) was removed in
+the same pass.
 
 ### TypeScript (opt-in per module)
 
@@ -273,7 +263,7 @@ Changesets only handles _what version, what changelog_ — actually pushing to a
 ### Publish / Deploy (prepared, not wired to a real target yet)
 
 `npm run publish` (`tools/publish.js`) resolves an npm dist-tag from the current branch (`master` -> `latest`,
-`release*` -> `release-candidate`,
+`release*` -> `release-candidate`, `hotfix*` -> `hotfix`,
 `devel*` -> `next`, anything else -> skipped) and runs `npm publish` for real, but **always as `--dry-run`** unless
 `PUBLISH_EXECUTE=true` is set — nothing in `Jenkinsfile` sets it, so CI stays dry-run until someone opts in on purpose,
 once there's a real registry to publish to.
@@ -299,7 +289,7 @@ both implemented the same repurposing this now ports back: install the _packed_ 
 output, plus every transitive local-dependency tarball, so a module like `d` resolves its whole `c`→`a`/`b` chain from
 local files with no registry lookup) into a disposable temp project and confirm it imports cleanly. This exercises the
 tarball's own `files`/`exports` rules, which the workspace link silently bypasses — a broken file-inclusion list gets
-caught here, before publish. It runs in the Publish stage (`Jenkinsfile` and `ci-local/lib.sh`, before
+caught here, before publish. It runs in the Publish stage (`Jenkinsfile`, before
 `npm run publish`), same order as both siblings.
 
 ### Test pyramid

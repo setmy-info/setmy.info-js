@@ -20,6 +20,12 @@ export function resolveDistTag(branchName) {
         return "next";
     }
 
+    // hotfix*: a candidate for master, published on its own dist-tag so the
+    // exact build under review can be installed (never "latest").
+    if (branchName.startsWith("hotfix")) {
+        return "hotfix";
+    }
+
     return null;
 }
 
@@ -49,7 +55,7 @@ function main() {
 
     if (!tag) {
         console.log(
-            `Skipping publish for ${workspace.packageName}: branch "${branch}" is not a publish branch (master/devel*/release*).`,
+            `Skipping publish for ${workspace.packageName}: branch "${branch}" is not a publish branch (master/devel*/release*/hotfix*).`,
         );
         process.exit(0);
     }

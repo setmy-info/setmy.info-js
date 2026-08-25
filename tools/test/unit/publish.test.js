@@ -12,6 +12,11 @@ test("resolveDistTag maps release* branches to release-candidate", () => {
     assert.equal(resolveDistTag("release-1.2"), "release-candidate");
 });
 
+test("resolveDistTag maps hotfix* branches to hotfix", () => {
+    assert.equal(resolveDistTag("hotfix"), "hotfix");
+    assert.equal(resolveDistTag("hotfix-1.0.1"), "hotfix");
+});
+
 test("resolveDistTag maps devel* branches to next", () => {
     assert.equal(resolveDistTag("devel"), "next");
     assert.equal(resolveDistTag("develop"), "next");

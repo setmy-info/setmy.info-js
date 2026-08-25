@@ -1009,3 +1009,47 @@ Date: 2026-08-25
   decision to keep the N/A rows (a visible no-op beats a silently dropped phase) — the same call item 51 asked for;
   `requirements-rules.md` §1.1 still reads as "same-named script even if no-op" and should be softened to match. ADR
   status is still **Draft** with three implementations built on it — worth promoting to Accepted.
+
+## Round 12: hotfix* branch support (jenkinsfile-starter 1.1.0, all three repos)
+
+Date: 2026-08-25
+
+Decision (per explicit choices): `hotfix*` = branched from `master`, one fix, quick human review + the **full**
+automated path, merged to `master`. Implemented identically in `jenkinsfile-starter` (now 1.1.0; README no longer says
+hotfix is unsupported; `TESTING` → `TEST` per ADR-0041 fed back; dead `MASTER_TO_PRELIVE` removed) and in the three
+`Jenkinsfile`s (1.1.0): new `Publish / Hotfix candidate` parallel stage (`startsWith('hotfix')`, `install-local` +
+`publish`), `HOTFIX_TO_TEST`/`HOTFIX_TO_PRELIVE = 'DEPLOY'`, `HOTFIX_TO_DEV = 'SKIP'` folded into the existing Deploy
+`when` expressions; `live` and `Tag` stay `master`-only. `ci-local/hotfix-branch.sh` + `run.sh` dispatch in all three;
+publish channel: npm dist-tag `hotfix` (`tools/publish.js`, unit test added), Python `rcN` suffix, Elixir
+publish-eligible. Spec: `requirements-rules.md` §3.1/§3.3/§3.4. Verified by running `./ci-local/run.sh hotfix-1.0.1`
+in all three repos (EXIT 0 each: Publish/Hotfix candidate → Deploy/test → Deploy/prelive, nothing else branch-gated),
+plus format/lint (prettier, ruff, `mix format`/credo) clean. Not verified: the Groovy itself against a live Jenkins —
+brace balance checked, and the edit is the same shape as the existing Snapshot/Release stages.
+
+## Round 13: `ci-local/` removed; local emulation to be rebuilt in Groovy
+
+Date: 2026-08-25
+
+Decision: the POSIX-`sh` CI emulation is deleted from all three repos (18 files: `run.sh`, `lib.sh`, and the four/five
+branch-case scripts each). Reason, confirmed by this session's own work: it was a second, hand-maintained definition of
+the pipeline's stage order and branch gating, so the `hotfix*` addition (Round 12) had to be written twice per repo and
+six times overall — the exact drift-by-duplication §3.11 was written to prevent, reproduced by §3.11's own reference
+implementation. Replacement, planned not built: one small **Groovy runner shared by the three repos that reads the real
+`Jenkinsfile`** (the `jenkinsfile-starter` shape plus these three) and executes its `stages`/`steps`/`when` closures
+locally — one source of truth. Until then `Jenkinsfile` is the only CI definition and there is no local emulation.
+
+Docs re-synced in the same pass: `requirements-rules.md` §3.11 rewritten (a local emulation MUST NOT be a divergent
+copy; no emulation at all is preferable to a second definition) and its §14 row; all three READMEs; ADR-0045's two
+cells that cited `ci-local` (Elixir Post Integration Test, Python/Elixir Site Deploy); the Elixir `Jenkinsfile` header
+and two code comments referencing the deleted scripts. Verified: `npm run format:check`/`lint`, `ruff format --check`/
+`ruff check`, `mix format --check-formatted`/`mix compile --warnings-as-errors` all clean; no live reference to
+`ci-local` remains outside the historical notes.
+
+**Note on the `verify` failure reported this session** (`Missing build artifact: .../dist/build-info.json` in
+`setmy.info-python`): investigated, **not a defect** — no code path removes build output. Reproduced the state exactly
+(`clean`, then `resources`, then `verify`, skipping `build`); timestamps confirm the sequence was run by hand
+(`dist/resources` 09:58:55, server state 09:59:56, both after the last automated run at 09:36:58), and a full
+`resources` → `build` → `package` → `verify` fan-out passes for all four modules. It is a live demonstration of
+backlog item **47**: unlike `mvn verify`, which runs every phase up to verify, these phases have no implied
+prerequisites, so skipping one fails late with an error that names the missing file rather than the phase to run.
+Item 47 remains open and is now the top recommendation.
