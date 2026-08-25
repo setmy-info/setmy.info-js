@@ -48,6 +48,15 @@ if (requestedSbom) {
     process.exit(0);
 }
 
+// Start from an empty artifact directory so an older-version tarball can't
+// linger next to the new one and get picked up by install-local/sign
+// (report.md item 46).
+for (const entry of fs.readdirSync(artifactsDir)) {
+    if (entry.endsWith(".tgz")) {
+        fs.rmSync(path.join(artifactsDir, entry), { force: true });
+    }
+}
+
 execSync(`${npmCommand} pack --pack-destination "${artifactsDir}"`, {
     cwd: workspace.workspace,
     stdio: "inherit",

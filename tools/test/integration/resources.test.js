@@ -13,6 +13,7 @@ const rootDir = path.resolve(
     "..",
 );
 const resourcesToolPath = path.join(rootDir, "tools", "resources.js");
+const buildToolPath = path.join(rootDir, "tools", "build.js");
 
 test("resources tool requires a canonical profile", () => {
     const workspaceDirectory = createWorkspace();
@@ -177,6 +178,52 @@ test("resources tool leaves unresolved tokens in place and warns", () => {
 
         assert.match(filtered, /\$\{notAProperty\}/);
         void stderr;
+    } finally {
+        fs.rmSync(workspaceDirectory, { recursive: true, force: true });
+    }
+});
+
+// Regression for report.md item 44: build.js used to `rm -rf dist/`, which
+// silently destroyed the resources phase output that always runs right
+// before it (Maven's compile never clears target/classes).
+test("resources output survives the build phase that follows it", () => {
+    const workspaceDirectory = createWorkspace();
+
+    try {
+        fs.mkdirSync(path.join(workspaceDirectory, "resources"));
+        fs.writeFileSync(
+            path.join(workspaceDirectory, "resources", "config.json"),
+            '{"profile": "${profile}"}',
+        );
+        fs.mkdirSync(path.join(workspaceDirectory, "src"));
+        fs.writeFileSync(
+            path.join(workspaceDirectory, "src", "index.js"),
+            "export const answer = 42;\n",
+        );
+
+        execFileSync(
+            process.execPath,
+            [resourcesToolPath, "--profile", "local"],
+            { cwd: workspaceDirectory, stdio: "pipe" },
+        );
+        execFileSync(process.execPath, [buildToolPath], {
+            cwd: workspaceDirectory,
+            stdio: "pipe",
+        });
+
+        const distDirectory = path.join(workspaceDirectory, "dist");
+
+        assert.ok(fs.existsSync(path.join(distDirectory, "index.js")));
+        assert.ok(fs.existsSync(path.join(distDirectory, "index.min.js")));
+        assert.equal(
+            JSON.parse(
+                fs.readFileSync(
+                    path.join(distDirectory, "resources", "config.json"),
+                    "utf8",
+                ),
+            ).profile,
+            "local",
+        );
     } finally {
         fs.rmSync(workspaceDirectory, { recursive: true, force: true });
     }

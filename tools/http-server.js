@@ -24,6 +24,9 @@ switch (command) {
     case "serve":
         await serve(args);
         break;
+    case "stop-all":
+        stopAllServers();
+        break;
     default:
         console.error(`Unknown command: ${command}`);
         printUsageAndExit(1);
@@ -152,8 +155,22 @@ async function startServer(parsedArgs) {
     const stateFile = getStateFile(port);
 
     if (fs.existsSync(stateFile)) {
-        console.error(`HTTP server for port ${port} is already registered.`);
-        process.exit(1);
+        const previous = JSON.parse(fs.readFileSync(stateFile, "utf8"));
+
+        if (isProcessAlive(previous.pid)) {
+            console.error(
+                `HTTP server for port ${port} is already registered (pid ${previous.pid}). Stop it first: node tools/http-server.js stop --port ${port}`,
+            );
+            process.exit(1);
+        }
+
+        // Registration left behind by a run that died before its post-*
+        // step (Ctrl-C, crashed test runner): the process is gone, so the
+        // file is stale, not a conflict (report.md item 46).
+        console.warn(
+            `Discarding stale HTTP server registration for port ${port} (pid ${previous.pid} is not running)`,
+        );
+        fs.rmSync(stateFile, { force: true });
     }
 
     const child = spawn(
@@ -175,6 +192,30 @@ async function startServer(parsedArgs) {
     );
 
     console.log(`Started HTTP server on port ${port} serving ${directory}`);
+}
+
+export function isProcessAlive(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return error.code === "EPERM";
+    }
+}
+
+// Stops every server registered under .artifacts/http-servers/ - used by
+// the root clean phase so a dirty state (leaked servers from an interrupted
+// run) never blocks the next pre-integration-test.
+export function stopAllServers() {
+    if (!fs.existsSync(stateDirectory)) {
+        return;
+    }
+
+    for (const entry of fs.readdirSync(stateDirectory)) {
+        if (entry.endsWith(".json")) {
+            stopServer({ port: entry.slice(0, -".json".length) });
+        }
+    }
 }
 
 function stopServer(parsedArgs) {
@@ -366,7 +407,7 @@ function getContentType(filePath) {
 
 function printUsageAndExit(code = 1) {
     console.error(
-        "Usage: node ./tools/http-server.js [start|stop] [--port <port>] [--directory <directory>]",
+        "Usage: node ./tools/http-server.js [start|stop|stop-all] [--port <port>] [--directory <directory>]",
     );
     process.exit(code);
 }

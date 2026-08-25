@@ -19,8 +19,23 @@ const banner = `/*!
 
 console.log(`Building ${workspace.packageName}`);
 
-removeDirectory(workspace.distDir);
+// Remove only what this phase creates. NOT `rm -rf dist/`: the resources
+// phase (tools/resources.js, Maven process-resources) writes dist/resources/
+// right before build runs, and wiping dist/ wholesale silently destroyed it
+// (report.md item 44) - Maven's compile adds to target/classes, never
+// clears it.
+const buildOutputs = [
+    "index.js",
+    "index.js.map",
+    "index.min.js",
+    "index.min.js.map",
+];
+
 ensureDirectory(workspace.distDir);
+
+for (const artifact of buildOutputs) {
+    fs.rmSync(path.join(workspace.distDir, artifact), { force: true });
+}
 
 const commonOptions = {
     entryPoints: [workspace.srcEntry],
@@ -58,12 +73,7 @@ if (fs.existsSync(webDir)) {
     removeDirectory(webDistDir);
     ensureDirectory(webDistDir);
 
-    for (const artifact of [
-        "index.js",
-        "index.js.map",
-        "index.min.js",
-        "index.min.js.map",
-    ]) {
+    for (const artifact of buildOutputs) {
         fs.copyFileSync(
             path.join(workspace.distDir, artifact),
             path.join(webDistDir, artifact),

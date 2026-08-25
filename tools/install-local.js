@@ -23,22 +23,21 @@ import {
 
 const workspace = getWorkspaceInfo();
 
+// The tarball for the package's CURRENT version (npm pack names it
+// <name-without-@, / -> ->-<version>.tgz), not just "any .tgz in the
+// directory" - a stale older-version tarball must never be installed in
+// place of the one Package just built (report.md item 46).
 function packedTarball(packageName) {
     const artifactsDir = path.join(
         rootDir,
         ".artifacts",
         toArtifactDirectoryName(packageName),
     );
+    const version = workspacesByName.get(packageName)?.packageJson.version;
+    const expected = `${toArtifactDirectoryName(packageName)}-${version}.tgz`;
+    const tarballPath = path.join(artifactsDir, expected);
 
-    if (!fs.existsSync(artifactsDir)) {
-        return undefined;
-    }
-
-    const tarball = fs
-        .readdirSync(artifactsDir)
-        .find((entry) => entry.endsWith(".tgz"));
-
-    return tarball ? path.join(artifactsDir, tarball) : undefined;
+    return fs.existsSync(tarballPath) ? tarballPath : undefined;
 }
 
 // The module's own tarball plus every transitive local-dependency tarball,
@@ -71,7 +70,7 @@ const tarballs = [...collectLocalChain(workspace.packageName)].map((name) => {
 
     if (!tarball) {
         console.error(
-            `No packed tarball found for ${name} — run the package phase first (npm run package)`,
+            `No packed tarball for ${name}@${workspacesByName.get(name)?.packageJson.version} in .artifacts/ — run the package phase first (npm run package)`,
         );
         process.exit(1);
     }

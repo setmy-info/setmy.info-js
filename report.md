@@ -813,3 +813,199 @@ approved for fixing. Everything was verified by running it, ending with a full c
   (whole repo, brings everything in line with the committed config) — after which the full `./ci-local/run.sh develop`
   pipeline passed clean end to end, including the new install-local step ("imports cleanly from its packed tarball"
   for all four modules) in Publish/Snapshot.
+
+## Round 10: Maven-lifecycle fidelity review (findings only)
+
+Date: 2026-08-25
+
+Lens for this round, per instruction: developers are switching over from Java/Maven projects, so the build MUST behave
+the way `mvn <phase>` behaves wherever npm allows it, and every place it can't MUST be labeled. Re-read for this round:
+every `.md` here, ADR-0045, ADR-0042, `package.json` (root + `packages/*`), every `tools/*.js`, `Jenkinsfile`,
+`ci-local/*`. Claims marked **verified by running** were reproduced on this machine (Linux, Node 24.19.0, npm 11.17.0)
+today; nothing was changed — append-only findings, same convention as Rounds 4/8. Numbering continues from 43.
+
+### What holds up (for the record)
+
+Phase _names_ and their relative order (`validate` → `resources` → `build` → `test` → `pre-/integration-/post-`) match
+Maven; the `pre`/`post` pairing is guaranteed in both `Jenkinsfile` (`post { always }`) and `ci-local/lib.sh`; reactor
+topological ordering with circular-dependency detection (`workspace-utils.js`) matches Maven's reactor; profile names are
+hard-validated per ADR-0042; `format:check` is genuinely non-mutating; `publish` is dry-run by default with the
+`--ignore-scripts` recursion guard; `install-local` now exercises the real tarball (Round 9). These are not re-litigated
+below.
+
+### Bugs (verified by running)
+
+44. **`npm run build` destroys the `resources` phase output.** `tools/build.js:327` does `removeDirectory(workspace.distDir)`
+    before bundling, and `tools/resources.js:241` writes to `dist/resources/`. Every documented sequence (README
+    "Lifecycle", `Jenkinsfile` Build stage, `ci-local/lib.sh` `stage_build`, ADR-0045 row order) runs `resources` and
+    then `build`, so `dist/resources/` never exists after the Build stage. Reproduced: `cd packages/a && npm run
+resources -- --profile local` → `dist/resources/config.json` present; `npm run build` → `dist/resources` gone.
+    In Maven, `process-resources` writes into `target/classes` and `compile` _adds_ to it — it never wipes it. Net
+    effect: the Maven `process-resources` equivalent — the "single biggest gap" Round 2 closed — is a no-op in the real
+    pipeline, and Round 9's `"!dist/resources"` `files` exclusion (item 37) was guarding output that had already been
+    deleted by the time `npm pack` ran. Nothing caught it because (a) `tools/test/integration/resources.test.js` tests
+    `resources.js` in isolation, never followed by `build.js`, and (b) nothing consumes the filtered output — grep of
+    `packages/*/src`, `test`, `web` finds no reader of `dist/resources/`. Fix: `build.js` MUST remove only what it
+    creates (`index.js`, `index.js.map`, `index.min.js`, `index.min.js.map`) instead of `dist/` wholesale; add an
+    integration test that runs `resources` then `build` and asserts the filtered file survives; and have one module
+    actually read `dist/resources/config.json` (e.g. `a`'s `web/index.html` fetching it and `server.e2e.test.js`
+    asserting on the substituted `apiBaseUrl`) so the phase is exercised end to end, in the same spirit as §7.5.
+45. **`npm audit` currently exits 1, so the Security phase fails every CI-emulation run today.** `npm audit` reports 2
+    high (js-yaml 3.x/4.x CVE-2026-59870 via `@changesets/cli` → `read-yaml-file`, and `brace-expansion`), and
+    `ci-local/lib.sh:201` gates on it (`npm run security || return $?`), as does `Jenkinsfile`'s Quality stage. So
+    `./ci-local/run.sh develop` cannot pass right now. Beyond the immediate `npm audit fix`, the policy is the real
+    finding: Maven's `dependency-check:check` gates by CVSS threshold (`failBuildOnCVSS`, default 11 = report-only)
+    and §2 row 14 says "report locally, MAY gate in CI", but the implementation gates everywhere on _any_ finding, with
+    no threshold, including dev-only transitive tooling. Suggest `npm audit --audit-level=high` (or `critical`) as the
+    explicit gate policy in the root `security` script, and keep the full un-thresholded output in the site report.
+46. **Leaked test servers + no cleanup path.** Four `tools/http-server.js serve` processes (ports 43132/43232/43332/
+    43432, e.g. PID 39971) are running on this machine right now, left behind by an interrupted earlier run, with their
+    registrations in `.artifacts/http-servers/*.json`; `cd packages/a && npm run pre-integration-test` fails with
+    "HTTP server for port 43132 is already registered." (verified by running). The `post { always }` guarantee only
+    holds inside the CI wrappers — a developer's Ctrl-C between `pre-` and `post-`, or a crashed `node --test`, leaves
+    the state permanently wedged, and neither `npm run clean` (module `clean.js:133` targets `target/dist/build/
+coverage/.cache/.tmp` only) nor anything at the root ever removes `.artifacts/`. Maven's `clean` removes `target/`
+    — every generated thing — and a fresh `mvn clean verify` always works from a dirty state (§2 row 2: "MUST be safe
+    to run from a dirty state"). Fix: root `clean` MUST stop every registered server and remove `.artifacts/`,
+    `.deploy/`, `.signatures/`, root `site/`; module `clean.js` MUST add `site/` and `web/dist/`; and `http-server.js
+start` SHOULD treat a registration whose PID is dead (`process.kill(pid, 0)` → ESRCH) as stale and replace it.
+
+### Maven-semantics divergences that are NOT documented (§1.3 / §16 require labeling)
+
+47. **No cumulative phase invocation — the single largest mental-model gap for a Maven developer.** `mvn package`
+    runs validate → compile → test → package; `npm run package` runs `npm pack` on whatever `dist/` happens to be on
+    disk (stale or missing — `npm pack` succeeds either way and `verify` is not implied). `npm run verify` checks that
+    two files exist. §1.2 promises "guess the command without reading documentation first"; the first guess a Maven
+    developer makes (`npm run verify`, `npm run package`) silently does something different. Phase _order_ is also
+    hand-copied in five places (README Lifecycle, `Jenkinsfile`, `ci-local/lib.sh`, `requirements-rules.md` §2,
+    ADR-0045) with nothing checking they agree. Suggest one `tools/lifecycle.js` holding the ordered phase list, invoked
+    as e.g. `npm run lifecycle -- verify` (or a `mvn`-flavoured alias), that runs every phase up to and including the
+    named one, with the `pre`/`post` pairs wrapped in `try/finally` and `--profile`/`DEPLOY_TARGET` passed through —
+    zero new dependencies, and `ci-local/lib.sh`/`Jenkinsfile` can then call it per stage instead of re-listing the
+    order. Individual `npm run <phase>` scripts stay as they are (Maven's `mvn plugin:goal` equivalent).
+48. **Package runs _after_ integration/e2e tests and _after_ verify; sign hashes the wrong thing.** Maven: `package`
+    → `pre-integration-test` → `integration-test` → `post-integration-test` → `verify` → `install` → `deploy`. Here
+    (`lib.sh`, `Jenkinsfile`, README): integration/e2e → coverage → security → `verify` → `package` → `sbom` →
+    `sign` → `install-local` → `publish`. Consequences: `tools/verify.js` never sees the tarball (it checks
+    `dist/index.js` + `dist/index.min.js` only); `tools/sign.js:595` hashes `dist/index.js`/`index.min.js`, not the
+    `.tgz` that `publish` actually ships — Maven's `gpg:sign` signs the jar; the SBOM is written by `package.js` but
+    never signed. `requirements-rules.md` §2 encodes this order, so the implementation is spec-conformant, but the spec
+    itself diverges from Maven and §16 doesn't list it. Recommend either (a) Maven-true: move `package` before
+    `pre-integration-test`, point `verify` at `.artifacts/<module>/*.tgz` (+ `sbom.json`), and sign the tarball; or
+    (b) keep the order, but sign the tarball + SBOM regardless and add the ordering to §16 with the reason.
+49. **`deploy` is not Maven's `deploy`.** Maven `deploy` = push the artifact to a remote repository, which is this
+    repo's `publish`; this repo's `deploy` is a `cargo:deploy`-style environment deployment. It fails safely (hard
+    error without `DEPLOY_TARGET`), but it's a name collision on the most consequential phase, and §1.3 forbids
+    "silently renaming ... to something Maven-alike-but-different". ADR-0045's table shows the mapping; README "Known
+    deliberate differences" and §16 do not. Fix: add it to both, and have `tools/deploy.js`'s usage error say
+    "(Maven's `deploy` phase is `npm run publish` here)".
+50. **`resources` has no default profile; `build` does not imply `resources`.** Maven profiles have `activeByDefault`,
+    so `mvn compile` with no `-P` works; here `npm run resources` without `--profile`/`BUILD_PROFILE` is a hard error
+    (`profile-utils.js:25`), and `npm run build` doesn't run it at all. ADR-0042 governs profile _names_, not whether
+    one may be default. Suggest defaulting to `local` when neither flag nor env is set, unless `CI=true` (then keep
+    the hard error so CI can never silently build with `local`), and fold `resources` into item 47's runner so
+    `lifecycle build` implies it.
+51. **§1.1 says every Maven phase MUST have a same-named script "even if no-op"; six don't exist.** `generate-sources`,
+    `process-classes`, `generate-test-resources`, `process-test-resources`, `test-compile`, `prepare-package` have no
+    script at all — ADR-0045 marks them "Not implemented"/"N/A" and carries a TODO to prune such rows. README itself
+    says "a module with no meaningful phase keeps the script as a no-op echo rather than deleting it". Pick one: add
+    no-op root scripts (cheap, and lets item 47's runner list the full Maven sequence), or soften §1.1 to "every phase
+    ADR-0045 lists as applicable", and resolve the ADR TODO.
+52. **`engines` is documentation, not enforcement.** `"engines": { "node": ">=24.0.0" }` (Round 3 item 2) only warns
+    unless `.npmrc` has `engine-strict=true`; there is no `.npmrc`. Maven's enforcer `requireJavaVersion` fails at
+    `validate`. On Node 22 `npm ci` succeeds and the failure re-appears as module `b`'s `.test.ts` refusing to run —
+    the exact confusing-three-phases-in failure §3.8 exists to prevent. Fix: add `.npmrc` with `engine-strict=true`
+    and have `tools/validate.js` (or the Inspection stage) check `process.version` against `engines.node`.
+53. **Phase-major, not module-major, reactor execution.** Maven runs the whole lifecycle for module `a`, then `b`...;
+    `run-workspaces.js` runs one phase across all modules, then the next. Harmless today (distinct ports, so all four
+    test servers coexist), but a unit-test failure in `a` is only reported after `d` has been built, and it's a
+    difference a Maven developer will notice. Not a bug — document it in §16, or let item 47's runner offer
+    module-major as an option.
+
+### Stale items re-verified today (still open)
+
+54. Item 22: `packageManager: "npm@10.9.2"` vs npm 11.17.0 actually in use. Item 40: `tools/bootstrap.js` still dead
+    (nothing references it). Item 27: `.changeset/module-a-resources-demo.md` still pending. Item 23: no per-module
+    LICENSE in tarballs. Item 12: `site.js:952` still links the SBOM into git-ignored `.artifacts/`.
+    ADR-0045: the npm E2E cell still says "for module `a`" although all four modules have `server.e2e.test.js`
+    (Round 2); status is still **Draft** while three implementations are built on it.
+
+### Recommended order
+
+44 (real data loss in the pipeline) → 45 (CI is red today) → 46 (dirty-state safety) → 47 (the Maven-feel win, and
+the natural place to fix 50/51/53 at once) → 48/49 (label or realign) → 52 → 54.
+
+### Cross-language: the same lens applied to `setmy.info-python` and `setmy.info-elixir`
+
+Per instruction, the three implementations must move together, technology-forced differences excepted. Both siblings
+were audited read-only against the same checklist as items 44-53 (no `.venv`/`_build` present, so verified by reading
+only). Result: the JS-specific bugs (44 build-wipes-resources, 45 red security gate) are JS-only; everything in the
+"undocumented divergence" group is **shared by all three**, so the fix is one spec change plus three ports, not three
+separate decisions.
+
+| Finding                                           | JS                                         | Python                                                          | Elixir                                                                                   |
+| ------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| 44 build destroys resources output                | **BUG**                                    | OK (`build.py` never deletes `dist/`)                           | OK (`priv/resources/<profile>/` untouched by compile)                                    |
+| resources output consumed by anything             | no                                         | no                                                              | no                                                                                       |
+| 47 cumulative "run up to phase X"                 | none                                       | none                                                            | none                                                                                     |
+| 48 verify before package; sign target             | verify before; signs `dist/*.js` (not tgz) | verify before; signs real wheel/sdist                           | verify before; signs real Hex `.tar`                                                     |
+| 49 `deploy` ≠ Maven `deploy` labeled              | no                                         | no                                                              | no (+ README says `mix deploy --target dev`, task reads only `DEPLOY_TARGET` — doc bug)  |
+| 46 clean removes `.artifacts/.deploy/.signatures` | no                                         | no                                                              | no (stock `mix clean`)                                                                   |
+| 46 stale server registration wedges next run      | yes (4 orphans running now)                | yes (same `.artifacts/http-servers/<port>.json`, no PID check)  | yes (`server.ex:55` raises, no PID check)                                                |
+| install-local picks stale artifact                | first `.tgz` found                         | `sorted(glob)[-1]` lexicographic (`1.9.0` > `1.10.0`)           | `[tar \| _]` of glob                                                                     |
+| 45 security gate threshold                        | any finding, red today                     | any finding                                                     | any finding (+ reasoned `.mix_audit_ignore`)                                             |
+| 50 default profile                                | hard error (`BUILD_PROFILE` fallback)      | hard error (`BUILD_PROFILE` fallback)                           | hard error (`BUILD_PROFILE` fallback, undocumented in README)                            |
+| 52 toolchain minimum enforced                     | no (`engines` only)                        | no (`requires-python` per package, root none, bootstrap silent) | apps yes (`elixir: "~> 1.18"`), **root `mix.exs` has none**, no OTP minimum (needs ≥ 27) |
+| 51 missing Maven phase names                      | 6                                          | 6 (+ no `compile`/`process-resources`/`install` aliases)        | 6; task names snake_case (Mix-forced) — undocumented vs kebab-case siblings              |
+| 53 phase-major reactor                            | yes                                        | yes                                                             | yes                                                                                      |
+
+Sibling-specific extras surfaced by the audit (belong in each sibling's own `report.md`, listed here so they aren't
+lost): Python — `install-local` runs only inside Publish on `master`/`devel*`, so feature/`release*` branches never
+exercise the wheel and `release*` deploys an unverified one; `publish.py` passes _every_ `*.whl`/`*.tar.gz` in
+`.artifacts/` to twine (stale versions would upload); `bootstrap.py` docstring says "recreate `.venv`" but reuses it.
+Elixir — `publish` dry-run leaves a fresh `*.tar` in `apps/<app>/`, so a second `mix package` without clean crashes on
+`[tar_path] =`; `demo_module_c`/`d` declare `package/0` without a `files:` allowlist (would leak `priv/resources` the
+day Hex's in-umbrella restriction lifts).
+
+**Recommended shared actions (spec first, then three ports):** (1) `requirements-rules.md` §2 — either move Package
+before pre-integration-test (Maven-true) or add the current ordering + the `deploy`≠`deploy` naming + phase-major
+execution to §16; (2) new §2 rule: Clean MUST remove every generated root directory _and_ stop/forget registered test
+servers, and a server `start` MUST treat a dead PID as stale; (3) new §2 rule: Package MUST empty its own artifact
+directory first, and install-local/publish/sign MUST select the artifact matching the manifest version, not a glob;
+(4) §2 row 14: state the gate threshold policy explicitly; (5) §3.8: the Inspection step MUST enforce the declared
+toolchain minimum, not just print the version; (6) a "run all phases up to X" entry point in each repo (item 47) so
+`mvn package` muscle memory has a home; (7) one module per repo MUST actually consume its filtered resources, or the
+Resources phase stays an unverified claim in all three.
+
+## Round 11: items 44, 45, 46 fixed (JS + ported to Python/Elixir)
+
+Date: 2026-08-25
+
+- **44 — fixed.** `tools/build.js` removes only its four own outputs instead of `rm -rf dist/`, so `dist/resources/`
+  survives the build. New regression test in `tools/test/integration/resources.test.js` ("resources output survives the
+  build phase that follows it") runs `resources` then `build` in a temp workspace and asserts the filtered file is
+  still there. Verified: after `./ci-local/run.sh develop`, `packages/a/dist/resources/config.json` exists.
+  Python/Elixir never had this bug (their build steps don't clear the output directory). Still open in all three: no
+  module actually _consumes_ the filtered output (cross-language table above).
+- **45 — fixed.** `npm audit fix` (js-yaml, brace-expansion; `package-lock.json` only) and the root `security` script
+  is now `npm audit --audit-level=high` — explicit threshold policy, Maven `failBuildOnCVSS`-style; documented in
+  README "Known deliberate differences". Python/Elixir keep any-finding gating (no severity flag in `pip-audit`/
+  `mix deps.audit`) and now say so in their READMEs.
+- **46 — fixed.** (a) `tools/clean.js` also removes `site/` and `web/dist/`; new `tools/clean-root.js` (wired into the
+  root `clean` script after the per-module fan-out) stops every registered test server (`http-server.js stop-all`,
+  new subcommand) and removes `.artifacts/`, `.deploy/`, `.signatures/`, `site/`. Verified by running: the first
+  `npm run clean` stopped the four servers leaked before this round (PIDs alive, ports 43132/43232/43332/43432).
+  (b) `http-server.js start` discards a registration whose PID is dead (`process.kill(pid, 0)`), still refuses when
+  it's alive — both paths verified by hand. (c) `tools/package.js` empties its `.artifacts/<module>/*.tgz` before
+  `npm pack`; (d) `tools/install-local.js` resolves the tarball by `<name>-<version>.tgz` from the manifest instead of
+  "first `.tgz` found". Full `./ci-local/run.sh develop` passes (EXIT 0); `format:check` and `lint` clean
+  (0 errors, the same 6 reviewed warnings).
+- **ADR-0045 re-synced (same day, in `setmy-info.github.io`).** Cell-by-cell re-check of the table against all three
+  implementations after this round. Stale/wrong cells fixed: npm Install still described the pre-Round-9
+  `npm install --no-save` no-op (now the repurposed packed-tarball check); npm E2E still said "for module `a`" (every
+  module since Round 2); npm Security said bare `npm audit` (now `--audit-level=high`, with the any-finding difference
+  recorded in the Python/Elixir cells); Clean cells for all three now describe the root clean + stop-servers step; npm
+  Compile cell notes that resources output survives it. The "TODO: remove lines" at the top was resolved as an explicit
+  decision to keep the N/A rows (a visible no-op beats a silently dropped phase) — the same call item 51 asked for;
+  `requirements-rules.md` §1.1 still reads as "same-named script even if no-op" and should be softened to match. ADR
+  status is still **Draft** with three implementations built on it — worth promoting to Accepted.

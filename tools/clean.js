@@ -4,7 +4,19 @@ import path from "node:path";
 
 import { getWorkspaceInfo, removeDirectory } from "./workspace-utils.js";
 
-const targets = ["target", "dist", "build", "coverage", ".cache", ".tmp"];
+// Everything a module's lifecycle generates (Maven `clean` removes target/,
+// i.e. every generated thing): build output, the site reports and the
+// browser copy of the build (report.md item 46).
+const targets = [
+    "target",
+    "dist",
+    "build",
+    "coverage",
+    ".cache",
+    ".tmp",
+    "site",
+    path.join("web", "dist"),
+];
 
 const workspace = getWorkspaceInfo();
 

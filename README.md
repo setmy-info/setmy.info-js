@@ -195,6 +195,17 @@ module must keep is the _phase names_ (`clean`, `validate`, `build`, `test`, `in
 rather than fighting the shared one. What should NOT be overridden per module: profile names (ADR-0041/0042), the
 pre/post cleanup pairing around integration/e2e, and the dry-run-by-default publish/deploy safety rules.
 
+### Clean (Maven `clean` equivalent — safe from any dirty state)
+
+`npm run clean` does what `mvn clean` does: removes _everything_ generated, not just the build output. Per module
+(`tools/clean.js`): `dist/`, `site/`, `web/dist/`, caches. At the root (`tools/clean-root.js`): `.artifacts/`,
+`.deploy/`, `.signatures/`, `site/` — and, first, it **stops every test HTTP server still registered** under
+`.artifacts/http-servers/` (`node tools/http-server.js stop-all`). That last part is what makes a `clean` after an
+interrupted run (Ctrl-C between `pre-integration-test` and `post-integration-test`) actually recover: previously the
+leaked servers made the next `pre-integration-test` fail with "already registered". Independently of `clean`,
+`http-server.js start` now treats a registration whose PID is no longer alive as stale and replaces it, and only refuses
+when the process really is running.
+
 ### Build output
 
 Each module build creates both outputs under `packages/<module>/dist`:
@@ -217,7 +228,9 @@ Package tarballs go to `.artifacts/`, deployment descriptors to `.deploy/`, and 
 `${propertyName}` token in every file with a value from that profile — text-level substitution, the same as Maven
 resource filtering, so it works unchanged in JSON, YAML, XML, `.properties`, `.env`, or plain text. Runs before `build`,
 matching Maven's `generate-resources`/`process-resources`
-phases preceding `compile`. A module with no `resources/` directory is a no-op.
+phases preceding `compile`. A module with no `resources/` directory is a no-op. `npm run build` removes only its own
+four output files, never `dist/` wholesale, so `dist/resources/` survives the build the way Maven's `target/classes`
+survives `compile` (this was broken until report.md item 44; `tools/test/integration/resources.test.js` now guards it).
 
 `--profile` is **required** and validated against exactly six names —
 `local`, `dev`, `ci`, `test`, `prelive`, `live` — the canonical environment list from ADR-0041, which ADR-0042 also
@@ -364,5 +377,9 @@ Not everything maps 1:1, and that's expected:
   currently flag 6 warnings, all reviewed and all false positives (local CLI tools indexing objects with
   developer-controlled keys, not attacker-reachable input) - left visible rather than suppressed, the same way you'd
   triage and leave a reviewed-clean SpotBugs finding rather than deleting it.
+- **Security gate policy**: `npm run security` is `npm audit --audit-level=high` — the build fails on high/critical
+  findings only; moderate/low stay visible in the site's security report. Maven's `dependency-check:check` gates by a
+  CVSS threshold (`failBuildOnCVSS`) the same way. The Python (`pip-audit`) and Elixir (`mix deps.audit`) siblings have
+  no severity flag and gate on any finding — a documented technology difference, see their READMEs.
 - `sign` currently produces SHA-256 checksums, not real GPG-style signing.
 - `publish`/`deploy` are placeholders — wire real registry/deploy targets when needed.
