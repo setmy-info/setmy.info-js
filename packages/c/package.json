@@ -9,12 +9,6 @@
         "node": ">=24.0.0"
     },
     "main": "./dist/index.js",
-    "config": {
-        "server": {
-            "port": 43331,
-            "directory": "web"
-        }
-    },
     "exports": {
         ".": {
             "default": "./dist/index.js"
@@ -22,39 +16,25 @@
         "./min": "./dist/index.min.js"
     },
     "files": [
-        "dist",
-        "!dist/resources",
-        "README.md"
+        "dist"
     ],
     "dependencies": {
         "@demo/module-a": "1.0.0",
         "@demo/module-b": "1.0.0"
     },
     "scripts": {
-        "clean": "node ../../tools/clean.js",
-        "validate": "node ../../tools/validate.js",
+        "clean": "rimraf dist web/dist coverage docs",
         "format": "prettier --write .",
         "lint": "eslint .",
-        "resources": "node ../../tools/resources.js",
-        "build": "node ../../tools/build.js",
-        "server": "node ../../tools/http-server.js",
-        "stop-server": "node ../../tools/http-server.js stop",
-        "test": "node ../../tools/run-tests.js unit",
-        "pre-integration-test": "node ../../tools/preintegration-test.js",
-        "integration-test": "node ../../tools/integration-test.js",
-        "post-integration-test": "node ../../tools/postintegration-test.js",
-        "pre-e2e-test": "node ../../tools/pree2e-test.js",
-        "e2e-test": "node ../../tools/e2e-test.js",
-        "post-e2e-test": "node ../../tools/poste2e-test.js",
-        "coverage": "node ../../tools/coverage.js",
-        "verify": "node ../../tools/verify.js",
-        "package": "node ../../tools/package.js",
-        "sbom": "node ../../tools/package.js --sbom",
-        "sign": "node ../../tools/sign.js",
-        "install-local": "node ../../tools/install-local.js",
-        "publish": "node ../../tools/publish.js",
-        "deploy": "node ../../tools/deploy.js",
-        "docs": "node ../../tools/docs.js",
-        "site": "node ../../tools/site.js"
+        "build:node": "esbuild src/index.js --bundle --format=esm --sourcemap --platform=node --target=node24 --outfile=dist/index.js",
+        "build:node:min": "esbuild src/index.js --bundle --format=esm --sourcemap --platform=node --target=node24 --minify --legal-comments=none --banner:js='/*! @demo/module-c 1.0.0 | Copyright (c) 2026 Imre Tabur | Licensed under the MIT License */' --outfile=dist/index.min.js",
+        "build:web": "esbuild src/index.js --bundle --format=esm --sourcemap --platform=browser --target=es2022 --minify --legal-comments=none --banner:js='/*! @demo/module-c 1.0.0 | Copyright (c) 2026 Imre Tabur | Licensed under the MIT License */' --outfile=web/dist/index.min.js",
+        "build": "npm run build:node && npm run build:node:min && npm run build:web",
+        "server": "http-server web -p 43331 -c-1",
+        "test": "node --test 'test/unit/**/*.test.{js,ts}'",
+        "integration-test": "node --test 'test/integration/**/*.test.{js,ts}'",
+        "e2e-test": "start-server-and-test \"http-server web -p 43332 -c-1 -s\" http://127.0.0.1:43332 \"node --test 'test/e2e/**/*.test.{js,ts}'\"",
+        "coverage": "node --test --experimental-test-coverage 'test/unit/**/*.test.{js,ts}'",
+        "docs": "jsdoc src --recurse --destination docs"
     }
 }

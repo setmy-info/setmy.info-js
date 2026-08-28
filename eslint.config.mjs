@@ -4,7 +4,7 @@ import security from "eslint-plugin-security";
 
 export default [
     {
-        ignores: ["**/dist/**", "**/site/**", "**/*.tgz"],
+        ignores: ["**/dist/**", "**/docs/**", "**/coverage/**", "**/*.tgz"],
     },
     {
         files: ["**/*.js", "**/*.mjs"],
@@ -18,21 +18,18 @@ export default [
             "no-undef": "error",
         },
     },
-    // SpotBugs/FindBugs-analogue: heuristic security checks (unsafe regex,
-    // eval, non-literal fs paths, etc.), all "warn" severity on purpose - a
-    // gating "lint" step failing the build on a heuristic false positive
-    // would be worse than the bug it's trying to catch. Findings still show
-    // up in `npm run lint` output and in the site's lint report
-    // (tools/lint-report.js). Applies to both JS and TS.
+    // Heuristic security checks (unsafe regex, eval, non-literal fs paths,
+    // etc.), all "warn" severity on purpose - a gating "lint" step failing
+    // the build on a heuristic false positive would be worse than the bug
+    // it's trying to catch. Applies to both JS and TS.
     {
         files: ["**/*.js", "**/*.mjs", "**/*.ts"],
         plugins: { security },
         rules: {
             ...security.configs.recommended.rules,
-            // Fires on virtually every path.join()-built fs call in this
-            // codebase (internally-computed paths, not user input) - disabled
-            // as pure noise; see README.md for the false-positive count with it
-            // enabled. The other 13 security rules stay on.
+            // Fires on virtually every path.join()-built fs call
+            // (internally-computed paths, not user input) - disabled as pure
+            // noise; the other 13 security rules stay on.
             "security/detect-non-literal-fs-filename": "off",
         },
     },
