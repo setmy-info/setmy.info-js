@@ -1,0 +1,9 @@
+application:
+    name: demo-module-d
+smi:
+    server:
+        port: 48231
+    log:
+        level: debug
+    api:
+        baseUrl: http://localhost:8000

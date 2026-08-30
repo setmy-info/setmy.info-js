@@ -1,0 +1,4 @@
+; Used only by the Jenkinsfile's Release stage (NPM_CONFIG_USERCONFIG=.npmrc.publish).
+; npm expands ${NPM_TOKEN} from the environment when it reads this file; it is never the
+; repository's default .npmrc, so an unset NPM_TOKEN breaks nothing but publishing.
+//registry.npmjs.org/:_authToken=${NPM_TOKEN}

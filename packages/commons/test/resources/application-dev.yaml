@@ -1,0 +1,4 @@
+smi:
+    server:
+        port: 8081
+    apiBaseUrl: https://dev.api.example

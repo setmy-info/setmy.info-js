@@ -1,0 +1,5 @@
+smi:
+    log:
+        level: warn
+    api:
+        baseUrl: https://api.setmy.info

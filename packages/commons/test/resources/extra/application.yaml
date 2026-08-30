@@ -1,0 +1,4 @@
+smi:
+    server:
+        secure: true
+    extra: from extra path

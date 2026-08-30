@@ -1,51 +1,182 @@
 # setmy.info-js
 
-npm workspaces monorepo: `packages/a`, `packages/b` (TypeScript), `packages/c`, `packages/d`.
+Monorepo for JavaScript and TypeScript modules, libraries, applications and API-s.
 
-## Scripts
+A plain **Node.js 24+ / npm workspaces** repository: every package under `packages/` is independently versioned,
+independently publishable to the npm registry and independently runnable. There is no build system on top of npm -
+the commands below are the ones any Node developer already knows (`package.json` scripts), tests run with Node's own
+test runner (`node --test`), and the tooling is one devDependency per job. Not a Maven lifecycle: Maven's phases are
+not emulated, only its three-tier test separation and its pre-/post-step shape around the slower tiers are kept.
 
-    ./build.sh                  # every step below, in order
-    ./clean.sh                  # npm run clean + remove node_modules
-    ./release.sh                # ./build.sh + npm publish --dry-run
+## Packages
 
-## Root commands
+- `commons` (npm `@setmy-info/commons`) - **not a demo**: the real, reusable library of this repo, Spring Boot style
+  layered application configuration. The JavaScript row of `clj-commons` / `python-commons` / setmy.info-python's
+  `smi_commons` / setmy.info-elixir's `SetmyInfo.Commons` - see "Application configuration" below.
+- `a` (`@setmy-info/demo-module-a`) - base module, no local dependencies
+- `b` (`@setmy-info/demo-module-b`) - base module, no local dependencies; **TypeScript**, the typed worked example
+- `c` (`@setmy-info/demo-module-c`) - depends on `a` and `b`
+- `d` (`@setmy-info/demo-module-d`) - depends on `c`, the deepest node in the demo graph
 
-    npm ci
-    npm run clean
-    npm run format
-    npm run format:check
-    npm run lint
-    npm run typecheck
-    npm run validate            # format:check + lint + typecheck
-    npm run build
-    npm test
-    npm run integration-test
-    npm run e2e-test
-    npm run coverage
-    npm run audit
-    npm run docs
-    npm run release             # npm publish --workspaces
+Each demo module is a real running instance: `npm run server -w @setmy-info/demo-module-<x>` serves the module's own
+`web/index.html` (and its browser bundle, `web/dist/index.min.js`) with `node:http` on its configured port
+(`48201`/`48211`/`48221`/`48231` for a/b/c/d, from each module's bundled `resources/application.yaml`). A module has
+`src/index.*` (the library, pure), `src/config.*` (its configuration through `commons`) and `src/server.*` (the
+instance); `npm run build` bundles the three with esbuild into `dist/` (Node, dependencies external) and `src/index.*`
+into `web/dist/index.min.js` (browser). TypeScript needs no transpiler step of its own: Node runs `.ts` files directly
+(type stripping), `tsc --noEmit` only type-checks, esbuild builds the tarball's `dist/`.
 
-## Single module
+## Getting started
 
-    npm run build -w @demo/module-a
-    npm test -w @demo/module-a
-    npm run integration-test -w @demo/module-a
-    npm run e2e-test -w @demo/module-a
-    npm run coverage -w @demo/module-a
-    npm run docs -w @demo/module-a
-    npm run server -w @demo/module-a    # http://127.0.0.1:43131
+```sh
+npm ci                                 # every workspace and the tooling, from package-lock.json
+npm run build
+npm test                               # unit tier
+npm run server -w @setmy-info/demo-module-a    # http://127.0.0.1:48201/
+```
 
-## Module scripts
+Formatting is a **local** concern: `npm run format` (Prettier) rewrites the files, CI only verifies with
+`npm run format:check` (a reformat in CI would leave changes in the Jenkins workspace that are never committed). Turn
+on format-on-save in your editor, or add a pre-commit hook:
 
-    clean build:node build:node:min build:web build server
-    test integration-test e2e-test coverage
-    format lint docs
-    typecheck                   # @demo/module-b only
+```sh
+printf '#!/bin/sh\nnpm run format:check && npm run lint\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+```
 
-## Ports
+## Application configuration (`commons` / `@setmy-info/commons`)
 
-    @demo/module-a    server 43131    e2e 43132
-    @demo/module-b    server 43231    e2e 43232
-    @demo/module-c    server 43331    e2e 43332
-    @demo/module-d    server 43431    e2e 43432
+Module names, function names and argument order are kept one-to-one with setmy.info-python's `smi_commons`,
+`python-commons` (`smi_python_commons.config.application`) and the Elixir row (`SetmyInfo.Commons.Config.*`):
+
+| `@setmy-info/commons`            | smi_commons / python-commons / Elixir                              |
+| -------------------------------- | ------------------------------------------------------------------ |
+| `Application` (`src/config.js`)  | `smi_commons.config` / `config.application` / `Config.Application` |
+| `constants` (`src/constants.js`) | `smi_commons.constants` / `config.constants` / `Config.Constants`  |
+| `overrides` (`src/overrides.js`) | `smi_commons.overrides` / _(none)_ / `Config.Overrides`            |
+| `strings` (`src/strings.js`)     | `smi_commons.strings` / `string.operations` / `String.Operations`  |
+
+### Overload order
+
+Each layer overrides the one above it:
+
+1. `application.{json,yml,yaml}` from each config path, in order (`./resources`, `./test/resources` by default; an
+   application passes its own, the demo modules pass their bundled `resources/`)
+2. `application-<profile>.{json,yml,yaml}` for each active profile
+3. optional files from `SMI_OPTIONAL_CONFIG_FILES`, then from `--smi-optional-config-files`
+4. `${ENV_VAR}` placeholders inside those files, resolved _before_ parsing, so `port: ${PORT}` with `PORT=8080` yields
+   the number `8080`
+5. environment variables - `SMI_SERVER_PORT` overrides `smi.server.port`
+6. CLI options - `--smi-server-port 9090` overrides both
+
+```js
+import { Application } from "@setmy-info/commons";
+
+const application = new Application(process.argv.slice(2), { configPaths: ["./resources"] });
+const port = application.get("smi.server.port", 8080);
+```
+
+```sh
+SMI_SERVER_PORT=9090 node src/server.js --smi-profiles dev --smi-server-port 9091
+npx smi-commons --smi-config-paths packages/commons/test/resources --smi-profiles dev   # resolved config as JSON
+```
+
+Files merge **deeply**. `local` is the default active profile (ADR-0041's developer-machine environment);
+`SMI_PROFILES` replaces the list, `--smi-profiles` replaces it again. Environment and CLI can only override _existing_
+leaf keys under the `smi` root, and an override is coerced to the type of the value it replaces (`port: 8080` stays a
+number, `secure: false` a boolean, a list splits on commas). Profile names follow ADR-0041 / ADR-0042: `local`, `dev`,
+`ci`, `test`, `prelive`, `live`. `yaml` (no transitive dependencies) is the library's one runtime dependency - Node has
+no YAML parser of its own.
+
+## Tests
+
+Three tiers, kept strictly apart by directory - `test/unit/`, `test/integration/`, `test/e2e/` in every package - and
+run one tier at a time with Node's own test runner (`scripts/test.js` = `node --test` over `packages/*/test/<tier>/`):
+
+```sh
+npm test                    # unit
+npm run integration-test    # integration
+npm run e2e-test            # e2e
+npm run coverage            # all three tiers in one run, under coverage
+```
+
+- `test/unit/` - fast, in-process, no files, no environment, no network
+- `test/integration/` - the public API surface, configuration files, environment variables
+- `test/e2e/` - the package driven end to end; for each demo module real HTTP requests against its own running
+  instance, for `commons` its CLI as a real process
+
+Every run also writes **JUnit XML** to `reports/junit/<tier>.xml` (Node's `junit` reporter) - what Jenkins' `junit`
+step reads.
+
+### Integration and e2e run against real running instances
+
+The integration and e2e tiers are bracketed by **pre and post steps** - the shape of Maven failsafe's
+`pre-integration-test` / `integration-test` / `post-integration-test`, without Maven:
+
+```sh
+npm run server:start        # every demo module as node src/server.*, detached in the background
+npm run e2e-test
+npm run server:stop         # idempotent - run it after a failed tier too
+```
+
+`server:start` (`scripts/servers.js`) reads each module's port the way the module itself does (its `src/config`),
+stops whatever an aborted run left behind, starts each instance (pid and log under `build/servers/`) and waits until
+every port answers. What the e2e tier exercises is therefore the running program - what gets deployed - not code hosted
+inside the test runner. `SMI_PROFILES=ci` in the environment makes both the instances and the tests use the `ci`
+profile, which is what CI does. When nothing is running - a developer typing `npm run e2e-test` alone - the tier
+starts the instances itself and always stops them afterwards; when `server:start` already ran, they are used as they
+are and left for `server:stop`.
+
+## Quality and reports
+
+| Command                | Tool                                       | What                                                                                                                                                                                       |
+| ---------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run format:check` | Prettier                                   | formatting (gate)                                                                                                                                                                          |
+| `npm run typecheck`    | TypeScript                                 | `tsc --noEmit` in the TypeScript modules (gate)                                                                                                                                            |
+| `npm run lint`         | ESLint + eslint-plugin-security            | lint (gate); the security rules are the static security analysis of this row, as warnings                                                                                                  |
+| `npm run audit`        | `npm audit --audit-level=high`             | **dependency vulnerability check** against the npm advisory database (gate) - the OWASP dependency-check of this row                                                                       |
+| `npm run coverage`     | `node --test --experimental-test-coverage` | **test coverage** over all three tiers, fails below 90 % lines; lcov in `reports/coverage/`                                                                                                |
+| `npm run reports`      | npm                                        | the documents: `npm audit --json` (`reports/security/`), CycloneDX **SBOM** from `npm sbom` (`reports/sbom/`), the dependency tree from `npm ls --all` (`reports/dependencies.txt`)        |
+| `npm run docs`         | JSDoc                                      | **API documentation** as HTML from the JSDoc comments of the JavaScript packages, `reports/docs/` (JSDoc does not read TypeScript, so module `b` is covered by its types, not by the docs) |
+
+Everything under `reports/` is archived by CI. Nothing here modifies files. The dependency check, SBOM, dependency tree,
+packaging and publishing are npm's own subcommands - no extra tool for any of them.
+
+## Packaging, publishing, deploying - one tarball per package
+
+```sh
+npm run package                                  # npm pack --workspaces, one tarball per package into dist/
+npm run release                                  # npm publish --workspaces (master builds only, needs NPM_TOKEN)
+npm run deploy -- prelive                        # scripts/deploy.js: the tarballs installed into build/deploy/prelive/
+```
+
+Deploying means installing the tarballs into a fresh prefix on the target and running the module there with
+`SMI_PROFILES` set to the target environment. `scripts/deploy.js` proves it in the workspace: a `package.json` under
+`build/deploy/<env>/` depends on every tarball and `overrides` each sibling to its tarball (a tarball's own
+dependencies would otherwise be resolved from the registry), `npm install --omit=dev`, then `demo-module-d` is imported
+from the installed artifact under the target profile. Real target hosts are not wired up yet.
+
+## CI
+
+`Jenkinsfile` is the single CI definition, kept stage-for-stage in sync with `jenkinsfile-starter` 1.2.0 (no stages
+added or removed, the placeholders filled): Inspection (pre-build checks ‖ build tools) → Preparation (`npm ci`,
+`npm ls --all`) → Build → Publish → Deploy → Tag, with the org's standard branch gating (`master` / `devel*` /
+`release*` / `hotfix*`). `SMI_PROFILES=ci` is set for the whole build. The Build stage runs, in order: `npm run clean`,
+format check, typecheck and build, the unit tier, the integration tier bracketed by `npm run server:start` /
+`server:stop`, the quality gates and documents (`lint`, `audit`, `reports`, `docs`), the e2e tier bracketed the same
+way, the coverage run over all three tiers bracketed the same way, then `npm run package`. Each is its own `npm` line,
+so the build log names what failed. `post { always }` stops any instance a failed tier left behind, feeds
+`reports/junit/*.xml` to Jenkins' `junit` step and archives `dist/*.tgz`, `reports/` and the instance logs. Publish
+(`master` only - the npm registry has no snapshot channel and a version publishes exactly once, so `devel*` keeps its
+tarballs as archived artifacts) runs `npm run release` with the token npm reads from `NPM_TOKEN` through the committed
+`.npmrc.publish` (gated by the `MASTER_TO_NPM` flag, like the deploy flags); Deploy runs `npm run deploy -- <env>` per
+target. The Jenkinsfile is declarative: no helper functions beyond the starter's `runCommand`, no shell scripts next
+to it - the same `npm` commands, in the same order, are the whole build on a developer machine too (`npm run clean`
+removes every build result, `rm -rf node_modules` gives a from-scratch checkout, `npm publish --workspaces --dry-run`
+is the Publish stage without the upload). No GitHub Actions workflow.
+
+### Hotfix branches (`hotfix*`)
+
+A `hotfix*` branch - branched from `master`, one fix, quick review - runs the exact same Inspection → Build path as
+every other branch (all test tiers, quality, packaging), is not published (only `master` publishes), and deploys to
+`test` and `prelive` (`HOTFIX_TO_TEST` / `HOTFIX_TO_PRELIVE`). It never deploys `dev` or `live` and never tags -
+merging it to `master` is what does that, through the normal master build.

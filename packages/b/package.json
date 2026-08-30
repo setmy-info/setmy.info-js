@@ -1,7 +1,7 @@
 {
-    "name": "@demo/module-b",
+    "name": "@setmy-info/demo-module-b",
     "version": "1.0.0",
-    "description": "Module B workspace package",
+    "description": "Module B of the dependency demo",
     "license": "MIT",
     "author": "Imre Tabur <imre.tabur@mail.ee>",
     "type": "module",
@@ -10,27 +10,23 @@
     },
     "main": "./dist/index.js",
     "exports": {
-        ".": {
-            "default": "./dist/index.js"
-        },
-        "./min": "./dist/index.min.js"
+        ".": "./dist/index.js",
+        "./config": "./dist/config.js",
+        "./server": "./dist/server.js"
     },
     "files": [
-        "dist"
+        "dist",
+        "resources",
+        "web"
     ],
+    "dependencies": {
+        "@setmy-info/commons": "1.0.0"
+    },
     "scripts": {
-        "clean": "rimraf dist web/dist coverage docs",
         "format": "prettier --write .",
         "lint": "eslint .",
         "typecheck": "tsc --noEmit",
-        "build:node": "esbuild src/index.ts --bundle --format=esm --sourcemap --platform=node --target=node24 --outfile=dist/index.js",
-        "build:node:min": "esbuild src/index.ts --bundle --format=esm --sourcemap --platform=node --target=node24 --minify --legal-comments=none --banner:js='/*! @demo/module-b 1.0.0 | Copyright (c) 2026 Imre Tabur | Licensed under the MIT License */' --outfile=dist/index.min.js",
-        "build:web": "esbuild src/index.ts --bundle --format=esm --sourcemap --platform=browser --target=es2022 --minify --legal-comments=none --banner:js='/*! @demo/module-b 1.0.0 | Copyright (c) 2026 Imre Tabur | Licensed under the MIT License */' --outfile=web/dist/index.min.js",
-        "build": "npm run build:node && npm run build:node:min && npm run build:web",
-        "server": "http-server web -p 43231 -c-1",
-        "test": "node --test 'test/unit/**/*.test.{js,ts}'",
-        "integration-test": "node --test 'test/integration/**/*.test.{js,ts}'",
-        "e2e-test": "start-server-and-test \"http-server web -p 43232 -c-1 -s\" http://127.0.0.1:43232 \"node --test 'test/e2e/**/*.test.{js,ts}'\"",
-        "coverage": "node --test --experimental-test-coverage 'test/unit/**/*.test.{js,ts}'"
+        "build": "esbuild src/index.ts src/config.ts src/server.ts --bundle --packages=external --format=esm --platform=node --target=node24 --sourcemap --outdir=dist && esbuild src/index.ts --bundle --format=esm --platform=browser --target=es2022 --minify --sourcemap --legal-comments=none --outfile=web/dist/index.min.js",
+        "server": "node src/server.ts"
     }
 }

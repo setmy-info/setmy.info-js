@@ -4,7 +4,10 @@
  * Licensed under the MIT License
  */
 
-import { createDescriptorFromC, createMessageFromC } from "@demo/module-c";
+import {
+    createDescriptorFromC,
+    createMessageFromC,
+} from "@setmy-info/demo-module-c";
 
 export function qux() {
     const message = "qux() from module-d";

@@ -4,8 +4,8 @@
  * Licensed under the MIT License
  */
 
-import { createDescriptorFromA } from "@demo/module-a";
-import { createDescriptorFromB } from "@demo/module-b";
+import { createDescriptorFromA } from "@setmy-info/demo-module-a";
+import { createDescriptorFromB } from "@setmy-info/demo-module-b";
 
 export function baz() {
     const message = "baz() from module-c";
