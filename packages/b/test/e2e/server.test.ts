@@ -1,6 +1,7 @@
 // E2E tier: real HTTP requests against the module's own running instance,
-// started by `npm run server:start` (scripts/servers.js) before this tier and
-// stopped after it. The port is read the same way the instance itself read it.
+// started by the pre-e2e-test lifecycle phase (`npm run pre-e2e-test`,
+// scripts/lifecycle.js) before this tier and stopped by post-e2e-test after it.
+// The port is read the same way the instance itself read it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

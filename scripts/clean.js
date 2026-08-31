@@ -4,14 +4,16 @@
 // deploy state (build/). node_modules stays - `npm ci` is the Preparation stage's
 // job; `rm -rf node_modules` when a developer wants a from-scratch checkout.
 //
-// Running instances are stopped first: build/servers/ holds their pid files, and
-// removing those while an instance is still up would leave it orphaned on its port.
+// The lifecycle's post phases run first: build/ holds their state (in this
+// template the instances' pid files), and removing that from under something
+// still running would leave it orphaned - an instance nothing can stop anymore.
 import fs from "node:fs";
 import path from "node:path";
 
-import { ROOT_DIR, stopAll } from "./servers.js";
+import { runPhases } from "./lifecycle.js";
+import { ROOT_DIR } from "./servers.js";
 
-await stopAll();
+await runPhases(["post-integration-test", "post-e2e-test"]);
 
 const packagesDir = path.join(ROOT_DIR, "packages");
 const targets = ["dist", "reports", "build", "coverage"].map((name) =>

@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-// Starts and stops every demo module as a real running instance - the pre-/post-
-// step around the integration and e2e tiers (the Maven failsafe
-// pre-integration-test / post-integration-test shape, without Maven):
+// Starts and stops every demo module as a real running instance - THIS TEMPLATE'S
+// implementation of the test lifecycle's pre and post steps. The generic side (the
+// pre-integration-test / post-integration-test / pre-e2e-test / post-e2e-test
+// phases the tiers and CI call) lives in scripts/lifecycle.js; this file is one
+// step a project keeps, replaces or adds to there. Direct use:
 //
-//     npm run server:start        (node scripts/servers.js start)
-//     npm run server:stop         (node scripts/servers.js stop; idempotent - run it after a failed tier too)
+//     node scripts/servers.js start
+//     node scripts/servers.js stop        (idempotent)
 //
 // Each module starts as `node packages/<module>/src/server.{js,ts}` with this same
 // node, detached in the background: pid in build/servers/<module>.pid, output in

@@ -15,8 +15,11 @@ pipeline {
                     Stages run plain npm commands (package.json scripts) and Node's own test
                     runner; the three test tiers stay strictly apart by directory and the
                     integration and e2e tiers run against real running instances bracketed
-                    by `npm run server:start` / `npm run server:stop` (the failsafe
-                    pre-/post-integration-test shape). Spring Boot style layered
+                    by generic lifecycle phases - `npm run pre-integration-test` /
+                    `post-integration-test` and `pre-e2e-test` / `post-e2e-test`, WHAT they
+                    do defined in one place, scripts/lifecycle.js (the failsafe
+                    pre-/post-integration-test shape; this template's steps start and stop
+                    the instances, a derived project adds its own there). Spring Boot style layered
                     configuration lives in packages/commons (@setmy-info/commons): YAML/JSON
                     per profile, environment and CLI overrides. npm's own audit / sbom / ls /
                     pack / publish are the dependency-check, SBOM, dependency tree, package
@@ -243,13 +246,15 @@ pipeline {
                 runCommand 'npm test'
 
                 echo 'Put here integration tests. Previous steps can be merged here.'
-                // pre-integration-test / integration-test / post-integration-test: the demo
-                // modules' instances are real running processes (scripts/servers.js), started
-                // under this build's SMI_PROFILES. A failing tier leaves them running;
-                // post { always } below stops them.
-                runCommand 'npm run server:start'
+                // pre-integration-test / integration-test / post-integration-test, the way
+                // Maven's failsafe brackets them. WHAT the pre and post phases do is defined
+                // in one place, scripts/lifecycle.js - in this template they start and stop
+                // the demo modules' instances (real processes, under this build's
+                // SMI_PROFILES). A failing tier leaves pre's work in place - post { always }
+                // below runs the post phases again; they are idempotent.
+                runCommand 'npm run pre-integration-test'
                 runCommand 'npm run integration-test'
-                runCommand 'npm run server:stop'
+                runCommand 'npm run post-integration-test'
 
                 echo 'Put here mutation tests'
                 echo 'Not wired in yet'
@@ -267,16 +272,16 @@ pipeline {
                 echo 'Not wired to a target yet - reports/ (junit, coverage, security, sbom, dependencies, docs) is archived by post { always } below'
 
                 echo 'Put here e2e tests'
-                // pre-e2e-test / e2e / post-e2e-test, same shape as the integration tier.
-                runCommand 'npm run server:start'
+                // pre-e2e-test / e2e-test / post-e2e-test, same shape as the integration tier.
+                runCommand 'npm run pre-e2e-test'
                 runCommand 'npm run e2e-test'
-                runCommand 'npm run server:stop'
+                runCommand 'npm run post-e2e-test'
                 // Test coverage over all three tiers in one run: the gate (90 % lines,
-                // scripts/test.js) and the lcov report (reports/coverage/). Bracketed the same
-                // way, because the integration and e2e tiers are part of it.
-                runCommand 'npm run server:start'
+                // scripts/test.js) and the lcov report (reports/coverage/). Bracketed by the
+                // union of both tiers' lifecycle phases - a step shared by them runs once.
+                runCommand 'node scripts/lifecycle.js pre-integration-test pre-e2e-test'
                 runCommand 'npm run coverage'
-                runCommand 'npm run server:stop'
+                runCommand 'node scripts/lifecycle.js post-integration-test post-e2e-test'
 
                 echo 'Put here system tests'
                 echo 'Put here acceptance tests'
@@ -427,7 +432,7 @@ pipeline {
     post {
         always {
             catchError(buildResult: null, stageResult: null) {
-                runCommand 'npm run server:stop'
+                runCommand 'node scripts/lifecycle.js post-integration-test post-e2e-test'
             }
             junit allowEmptyResults: true, testResults: 'reports/junit/unit.xml, reports/junit/integration.xml, reports/junit/e2e.xml'
             archiveArtifacts artifacts: 'dist/*.tgz, reports/**, build/servers/*.log', allowEmptyArchive: true, fingerprint: true

@@ -109,22 +109,30 @@ step reads.
 
 ### Integration and e2e run against real running instances
 
-The integration and e2e tiers are bracketed by **pre and post steps** - the shape of Maven failsafe's
+The integration and e2e tiers are bracketed by **generic pre and post phases** - the shape of Maven failsafe's
 `pre-integration-test` / `integration-test` / `post-integration-test`, without Maven:
 
 ```sh
-npm run server:start        # every demo module as node src/server.*, detached in the background
+npm run pre-e2e-test        # everything the tier needs, up
 npm run e2e-test
-npm run server:stop         # idempotent - run it after a failed tier too
+npm run post-e2e-test       # cleanup; idempotent - run it after a failed tier too
+
+node scripts/lifecycle.js pre-integration-test pre-e2e-test    # several phases at once, e.g.
+npm run coverage                                               # around the all-tiers coverage
+node scripts/lifecycle.js post-integration-test post-e2e-test  # run; shared steps run once
 ```
 
-`server:start` (`scripts/servers.js`) reads each module's port the way the module itself does (its `src/config`),
-stops whatever an aborted run left behind, starts each instance (pid and log under `build/servers/`) and waits until
-every port answers. What the e2e tier exercises is therefore the running program - what gets deployed - not code hosted
-inside the test runner. `SMI_PROFILES=ci` in the environment makes both the instances and the tests use the `ci`
-profile, which is what CI does. When nothing is running - a developer typing `npm run e2e-test` alone - the tier
-starts the instances itself and always stops them afterwards; when `server:start` already ran, they are used as they
-are and left for `server:stop`.
+**WHAT the phases do is defined in exactly one place, `scripts/lifecycle.js`** - a phase is a list of steps (async
+functions), and this repo is a template: a project started from it adds what its own tiers need there (a database, a
+message broker, a mock of a third-party API, docker compose up/down, seeding test data, ...). Post steps must stay
+idempotent: CI runs them again after a failed tier, and `npm run clean` runs them before removing their state.
+
+In this template the steps start and stop the demo modules' instances (`scripts/servers.js`): each module's port is
+read the way the module itself reads it (its `src/config`), whatever an aborted run left behind is stopped first, each
+instance starts detached (pid and log under `build/servers/`) and the step waits until every port answers. What the
+e2e tier exercises is therefore the running program - what gets deployed - not code hosted inside the test runner.
+`SMI_PROFILES=ci` in the environment makes both the instances and the tests use the `ci` profile, which is what CI
+does.
 
 ## Quality and reports
 
@@ -161,10 +169,11 @@ from the installed artifact under the target profile. Real target hosts are not 
 added or removed, the placeholders filled): Inspection (pre-build checks ‖ build tools) → Preparation (`npm ci`,
 `npm ls --all`) → Build → Publish → Deploy → Tag, with the org's standard branch gating (`master` / `devel*` /
 `release*` / `hotfix*`). `SMI_PROFILES=ci` is set for the whole build. The Build stage runs, in order: `npm run clean`,
-format check, typecheck and build, the unit tier, the integration tier bracketed by `npm run server:start` /
-`server:stop`, the quality gates and documents (`lint`, `audit`, `reports`, `docs`), the e2e tier bracketed the same
-way, the coverage run over all three tiers bracketed the same way, then `npm run package`. Each is its own `npm` line,
-so the build log names what failed. `post { always }` stops any instance a failed tier left behind, feeds
+format check, typecheck and build, the unit tier, the integration tier bracketed by its `pre-integration-test` /
+`post-integration-test` phases, the quality gates and documents (`lint`, `audit`, `reports`, `docs`), the e2e tier
+bracketed by its phases the same way, the coverage run over all three tiers bracketed by the union of both tiers'
+phases, then `npm run package`. Each is its own line, so the build log names what failed. `post { always }` runs both
+post phases again (idempotent - they clean up whatever a failed tier left behind), feeds
 `reports/junit/*.xml` to Jenkins' `junit` step and archives `dist/*.tgz`, `reports/` and the instance logs. Publish
 (`master` only - the npm registry has no snapshot channel and a version publishes exactly once, so `devel*` keeps its
 tarballs as archived artifacts) runs `npm run release` with the token npm reads from `NPM_TOKEN` through the committed

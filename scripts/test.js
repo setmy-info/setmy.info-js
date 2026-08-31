@@ -10,17 +10,28 @@
 // Every run also writes JUnit XML to reports/junit/<tier>.xml - what Jenkins' junit
 // step reads - next to the spec output on stdout.
 //
-// The integration and e2e tiers (and coverage) need the demo modules' instances
-// running. When `npm run server:start` already started them (CI does, as its own
-// pre step) they are used as they are and left running for the post step; when
-// nothing is running - a developer typing `npm run e2e-test` - they are started
-// before and always stopped after, whatever the tests did.
+// This runner only runs tests. What the integration and e2e tiers need around them
+// (in this template: the demo modules' running instances) is the lifecycle's job -
+// bracket the tier with its pre and post phases, defined in scripts/lifecycle.js:
+//
+//     npm run pre-e2e-test
+//     npm run e2e-test
+//     npm run post-e2e-test       # idempotent - run it after a failed tier too
+//
+// and `npm run coverage` with both tiers' phases around it (shared steps run once):
+//
+//     node scripts/lifecycle.js pre-integration-test pre-e2e-test
+//     npm run coverage
+//     node scripts/lifecycle.js post-integration-test post-e2e-test
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-import { ROOT_DIR, running, startAll, stopAll } from "./servers.js";
-
+const ROOT_DIR = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "..",
+);
 const TIERS = ["unit", "integration", "e2e"];
 const tier = process.argv[2];
 
@@ -60,23 +71,9 @@ if (tier === "coverage") {
     );
 }
 
-const needsServers = tier !== "unit";
-const manageServers = needsServers && !running();
-
-if (manageServers) {
-    await startAll();
-}
-
-let status;
-try {
-    ({ status } = spawnSync(process.execPath, [...args, ...patterns], {
-        cwd: ROOT_DIR,
-        stdio: "inherit",
-    }));
-} finally {
-    if (manageServers) {
-        await stopAll();
-    }
-}
+const { status } = spawnSync(process.execPath, [...args, ...patterns], {
+    cwd: ROOT_DIR,
+    stdio: "inherit",
+});
 
 process.exit(status ?? 1);
