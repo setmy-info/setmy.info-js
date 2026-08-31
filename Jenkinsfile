@@ -1,3 +1,4 @@
+
 def runCommand(String command) {
     if (isUnix()) {
         sh command
@@ -9,44 +10,14 @@ def runCommand(String command) {
 pipeline {
 
     /*
-    setmy.info-js
-    version 3.0.0 - the Maven-lifecycle emulation (tools/*.js, changesets, profiles/*.json
-                    resource filtering, sign / sbom / site / install-local scripts) is gone.
-                    Stages run plain npm commands (package.json scripts) and Node's own test
-                    runner; the three test tiers stay strictly apart by directory and the
-                    integration and e2e tiers run against real running instances bracketed
-                    by generic lifecycle phases - `npm run pre-integration-test` /
-                    `post-integration-test` and `pre-e2e-test` / `post-e2e-test`, WHAT they
-                    do defined in one place, scripts/lifecycle.js (the failsafe
-                    pre-/post-integration-test shape; this template's steps start and stop
-                    the instances, a derived project adds its own there). Spring Boot style layered
-                    configuration lives in packages/commons (@setmy-info/commons): YAML/JSON
-                    per profile, environment and CLI overrides. npm's own audit / sbom / ls /
-                    pack / publish are the dependency-check, SBOM, dependency tree, package
-                    and deploy tools; JUnit XML from node --test's junit reporter. Re-synced
-                    to jenkinsfile-starter 1.2.0: the same stages and the same steps, in the
-                    same order, only the placeholder commands replaced. The starter's numbered
-                    learning EXAMPLES (variable demo, sleep, retry, timeout, build-started
-                    email) and its PATH setup are left out - build tools are guaranteed on
-                    every Jenkins node. Declarative only, no helper functions beyond the
-                    starter's runCommand: the Release stage is gated by a MASTER_TO_NPM flag
-                    (the same shape as the *_TO_* deploy flags) and npm reads the token from
-                    NPM_TOKEN through the committed .npmrc.publish. No build.sh / clean.sh:
-                    the npm commands here are the whole build, locally too.
-    version 2.x   - Maven style build lifecycle emulated on top of npm (reverted).
-    version 1.0.0 - migrated from jenkinsfile-starter for setmy.info-js (npm workspaces,
-                    4-module dependency demo). No GitHub Actions workflow: this Jenkinsfile is
-                    this repo's one CI definition.
-
-    jenkinsfile-starter
     version 1.2.0 - release* no longer deploys to DEV: the RELEASE_TO_DEV flag and the release
                     branch of the 'dev' deploy stage are gone. release* deploys to TEST and
                     PRELIVE only. develop -> DEV is unchanged.
     version 1.1.0 - pollSCM instead of cron (build on new commits, not on a timer),
                     quietPeriod + disableConcurrentBuilds(abortPrevious: true) so that a burst
                     of commits becomes one build of the newest change,
-                    release* added to Publish/Snapshot (reverted again in 1.2.0: only develop
-                    publishes a snapshot)
+                    elease* added to Publish/Snapshot: develop, release* and hotfix* all publish
+                    a candidate of unknown quality
                     TEST environment renamed to the ADR-0041 canonical name
     version 1.0.1 - fileExists precondition check now actually gates (was a discarded boolean)
 
@@ -152,11 +123,6 @@ pipeline {
         // instances and the tests read it through @setmy-info/commons (SMI_PROFILES), so both
         // sides use the same application-ci.yaml layer. The Deploy stages set their own target.
         SMI_PROFILES = 'ci'
-
-        // Publishing to the npm registry, master only. The token is read by npm itself from
-        // NPM_TOKEN through .npmrc.publish (NPM_CONFIG_USERCONFIG in the Release stage) - no
-        // file is written by the pipeline; an unset NPM_TOKEN fails that stage loudly.
-        MASTER_TO_NPM = 'PUBLISH'
 
         MASTER_TO_LIVE = 'DEPLOY'
 
@@ -301,8 +267,8 @@ pipeline {
                 */
                 stage('Release') {
                     when {
-                        environment name: 'MASTER_TO_NPM', value: 'PUBLISH'
                         branch 'master'
+                        // changeset "**/file/to/be/changed"
                     }
                     steps {
                         echo 'Put here software release steps'
