@@ -35,9 +35,12 @@ npm test                               # unit tier
 npm run server -w @setmy-info/demo-module-a    # http://127.0.0.1:48201/
 ```
 
-Formatting is a **local** concern: `npm run format` (Prettier) rewrites the files, CI only verifies with
-`npm run format:check` (a reformat in CI would leave changes in the Jenkins workspace that are never committed). Turn
-on format-on-save in your editor, or add a pre-commit hook:
+Formatting is a **local** concern: `npm run format` rewrites the files, CI only verifies with
+`npm run format:check` (a reformat in CI would leave changes in the Jenkins workspace that are never committed). Both
+commands run the sequential list in `scripts/format.js` - each tool owns one file set, in order, and the first
+failure stops the run. This template lists Prettier only (JS/TS/json/md); a derived project (LESS, Angular, ...)
+adds its own tools next to it, the same idea as `scripts/lifecycle.js`. Turn on format-on-save in your editor, or
+add a pre-commit hook:
 
 ```sh
 printf '#!/bin/sh\nnpm run format:check && npm run lint\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
@@ -138,7 +141,7 @@ does.
 
 | Command                | Tool                                       | What                                                                                                                                                                                       |
 | ---------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `npm run format:check` | Prettier                                   | formatting (gate)                                                                                                                                                                          |
+| `npm run format:check` | `scripts/format.js`                        | sequential formatters, check half (gate); this template: Prettier                                                                                                                          |
 | `npm run typecheck`    | TypeScript                                 | `tsc --noEmit` in the TypeScript modules (gate)                                                                                                                                            |
 | `npm run lint`         | ESLint + eslint-plugin-security            | lint (gate); the security rules are the static security analysis of this row, as warnings                                                                                                  |
 | `npm run audit`        | `npm audit --audit-level=high`             | **dependency vulnerability check** against the npm advisory database (gate) - the OWASP dependency-check of this row                                                                       |

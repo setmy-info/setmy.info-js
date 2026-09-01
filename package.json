@@ -18,8 +18,8 @@
     ],
     "scripts": {
         "clean": "node scripts/clean.js",
-        "format": "prettier --write .",
-        "format:check": "prettier --check .",
+        "format": "node scripts/format.js",
+        "format:check": "node scripts/format.js --check",
         "lint": "eslint .",
         "typecheck": "npm run typecheck --workspaces --if-present",
         "build": "npm run build --workspaces --if-present",
