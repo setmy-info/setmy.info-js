@@ -10,13 +10,15 @@ def runCommand(String command) {
 pipeline {
 
     /*
+    version 1.2.1 - Snapshot (devel.*) publishes the -SNAPSHOT version and Release (master)
+                    the release version, each to its own registry (scripts/release.js).
     version 1.2.0 - release* no longer deploys to DEV: the RELEASE_TO_DEV flag and the release
                     branch of the 'dev' deploy stage are gone. release* deploys to TEST and
                     PRELIVE only. develop -> DEV is unchanged.
     version 1.1.0 - pollSCM instead of cron (build on new commits, not on a timer),
                     quietPeriod + disableConcurrentBuilds(abortPrevious: true) so that a burst
                     of commits becomes one build of the newest change,
-                    elease* added to Publish/Snapshot: develop, release* and hotfix* all publish
+                    release* added to Publish/Snapshot: develop, release* and hotfix* all publish
                     a candidate of unknown quality
                     TEST environment renamed to the ADR-0041 canonical name
     version 1.0.1 - fileExists precondition check now actually gates (was a discarded boolean)
@@ -283,10 +285,12 @@ pipeline {
                     }
                     steps {
                         echo 'Put here software snapshot publishing steps'
-                        // The npm registry has no snapshot channel and a version publishes
-                        // exactly once, so develop keeps its tarballs as archived artifacts
-                        // (post { always } below); publishing happens from master.
-                        echo 'No npm snapshot publishing - the Build stage tarballs in dist/ are archived as the snapshot'
+                        // scripts/release.js publishes the -SNAPSHOT version to
+                        // NPM_SNAPSHOT_REGISTRY from devel.* (and the release version to
+                        // NPM_RELEASE_REGISTRY from master). Without the registry it dry-runs.
+                        withEnv(['NPM_CONFIG_USERCONFIG=.npmrc.publish']) {
+                            runCommand 'npm run release'
+                        }
                     }
                 }
                 stage('Release reports') {

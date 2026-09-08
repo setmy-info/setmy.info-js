@@ -2,3 +2,7 @@
 ; npm expands ${NPM_TOKEN} from the environment when it reads this file; it is never the
 ; repository's default .npmrc, so an unset NPM_TOKEN breaks nothing but publishing.
 //registry.npmjs.org/:_authToken=${NPM_TOKEN}
+; Snapshot and release registries (Nexus / Artifactory style), selected by branch in
+; scripts/release.js via NPM_SNAPSHOT_REGISTRY / NPM_RELEASE_REGISTRY. Placeholders:
+; //nexus.example.org/repository/npm-snapshots/:_authToken=${NPM_TOKEN}
+; //nexus.example.org/repository/npm-releases/:_authToken=${NPM_TOKEN}

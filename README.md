@@ -156,7 +156,7 @@ packaging and publishing are npm's own subcommands - no extra tool for any of th
 
 ```sh
 npm run package                                  # npm pack --workspaces, one tarball per package into dist/
-npm run release                                  # npm publish --workspaces (master builds only, needs NPM_TOKEN)
+npm run release                                  # scripts/release.js: devel* -> -SNAPSHOT to the snapshot registry, master -> release to the release registry; dry run without a registry
 npm run deploy -- prelive                        # scripts/deploy.js: the tarballs installed into build/deploy/prelive/
 ```
 
@@ -178,12 +178,12 @@ bracketed by its phases the same way, the coverage run over all three tiers brac
 phases, then `npm run package`. Each is its own line, so the build log names what failed. `post { always }` runs both
 post phases again (idempotent - they clean up whatever a failed tier left behind), feeds
 `reports/junit/*.xml` to Jenkins' `junit` step and archives `dist/*.tgz`, `reports/` and the instance logs. Publish
-(`master` only - the npm registry has no snapshot channel and a version publishes exactly once, so `devel*` keeps its
-tarballs as archived artifacts) runs `npm run release` with the token npm reads from `NPM_TOKEN` through the committed
-`.npmrc.publish` (gated by the `MASTER_TO_NPM` flag, like the deploy flags); Deploy runs `npm run deploy -- <env>` per
+runs `npm run release`: `devel*` publishes the `-SNAPSHOT` version to `NPM_SNAPSHOT_REGISTRY`, `master` the release
+version (no `-SNAPSHOT`) to `NPM_RELEASE_REGISTRY`, with the token npm reads from `NPM_TOKEN` through the committed
+`.npmrc.publish`; a version that does not match its branch is refused; Deploy runs `npm run deploy -- <env>` per
 target. The Jenkinsfile is declarative: no helper functions beyond the starter's `runCommand`, no shell scripts next
 to it - the same `npm` commands, in the same order, are the whole build on a developer machine too (`npm run clean`
-removes every build result, `rm -rf node_modules` gives a from-scratch checkout, `npm publish --workspaces --dry-run`
+removes every build result, `rm -rf node_modules` gives a from-scratch checkout, `npm run release` without a registry configured
 is the Publish stage without the upload). No GitHub Actions workflow.
 
 ### Hotfix branches (`hotfix*`)
