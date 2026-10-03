@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>cl-json-js demo</title>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                max-width: 40rem;
+                margin: 2rem auto;
+                padding: 0 1rem;
+            }
+            .badge-vip {
+                color: #a16207;
+                font-weight: bold;
+            }
+            .order-item .price {
+                margin-left: 1ch;
+                color: #555;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>cl-json-js</h1>
+        <p>
+            Build first (<code>npm run build -w @setmy-info/cl-json-js</code>),
+            then open this file. The payloads below are plain
+            <code>&lt;script type="application/cl+json"&gt;</code> elements,
+            mounted by the classic script-tag build.
+        </p>
+
+        <div id="profile"></div>
+        <script type="application/json" id="profile-state">
+            {
+                "user": { "name": "Ann", "score": 150 },
+                "orders": [
+                    { "title": "Book", "price": 12 },
+                    { "title": "Pen", "price": 2.5 }
+                ]
+            }
+        </script>
+        <script
+            type="application/cl+json"
+            data-target="#profile"
+            data-state="profile-state"
+        >
+            [
+                ":div",
+                [":class", "pwa-card", ":id", "user-widget"],
+                [
+                    ":h2",
+                    [
+                        "cl:format",
+                        null,
+                        "Welcome back, ~a",
+                        ["cl:getf", "user.name"]
+                    ]
+                ],
+                [
+                    "cl:if",
+                    ["cl:>", ["cl:getf", "user.score"], 100],
+                    [":div", [":class", "badge-vip"], "VIP Member"],
+                    [":div", [":class", "badge-standard"], "Standard Account"]
+                ],
+                [":h3", "Your Orders:"],
+                [
+                    ":ul",
+                    [":class", "order-list"],
+                    [
+                        "cl:dolist",
+                        ["order", ["cl:getf", "orders"]],
+                        [
+                            ":li",
+                            [":class", "order-item"],
+                            [
+                                ":span",
+                                [":class", "title"],
+                                ["cl:getf", "order.title"]
+                            ],
+                            [
+                                ":span",
+                                [":class", "price"],
+                                [
+                                    "cl:format",
+                                    null,
+                                    "$~,2f",
+                                    ["cl:getf", "order.price"]
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        </script>
+
+        <div id="counter"></div>
+        <script type="application/cl+json" data-target="#counter">
+            [
+                "cl:progn",
+                [
+                    "cl:defun",
+                    "app:label",
+                    ["n"],
+                    ["cl:format", null, "Clicked ~d time~:p", ["cl:getf", "n"]]
+                ],
+                [
+                    ":p",
+                    [
+                        ":button",
+                        { "on-click": ["cl:lambda", [], ["cl:incf", "count"]] },
+                        "Click me"
+                    ],
+                    " ",
+                    ["app:label", ["cl:or", ["cl:getf", "count"], 0]]
+                ]
+            ]
+        </script>
+
+        <script src="../dist/cl-json.min.js"></script>
+    </body>
+</html>

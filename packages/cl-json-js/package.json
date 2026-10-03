@@ -1,0 +1,49 @@
+{
+    "name": "@setmy-info/cl-json-js",
+    "version": "1.0.0",
+    "description": "Common Lisp (CL-WHO style) S-expressions in JSON, evaluated in the browser into DOM changes - a lightweight server-driven UI runtime",
+    "license": "AGPL-3.0-only OR LicenseRef-cl-json-js-Commercial",
+    "author": "Imre Tabur <imre.tabur@mail.ee>",
+    "keywords": [
+        "common-lisp",
+        "cl-who",
+        "s-expression",
+        "json",
+        "dom",
+        "sdui",
+        "server-driven-ui",
+        "template"
+    ],
+    "type": "module",
+    "sideEffects": [
+        "./src/browser.js"
+    ],
+    "main": "./src/index.js",
+    "module": "./src/index.js",
+    "types": "./src/index.d.ts",
+    "unpkg": "./dist/cl-json.min.js",
+    "jsdelivr": "./dist/cl-json.min.js",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "default": "./src/index.js"
+        },
+        "./browser": "./dist/cl-json.min.js",
+        "./esm": "./dist/cl-json.esm.min.js",
+        "./package.json": "./package.json"
+    },
+    "files": [
+        "src",
+        "dist",
+        "web",
+        "example.html",
+        "LICENSE",
+        "LICENSE-AGPL-3.0.txt",
+        "COMMERCIAL-LICENSE.md"
+    ],
+    "scripts": {
+        "format": "prettier --write .",
+        "lint": "eslint .",
+        "build": "esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2017 --minify --sourcemap --outfile=dist/cl-json.min.js && esbuild src/index.js --bundle --format=esm --platform=browser --target=es2020 --minify --sourcemap --outfile=dist/cl-json.esm.min.js"
+    }
+}

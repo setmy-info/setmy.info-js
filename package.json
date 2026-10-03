@@ -11,6 +11,7 @@
     },
     "workspaces": [
         "packages/commons",
+        "packages/cl-json-js",
         "packages/a",
         "packages/b",
         "packages/c",
@@ -33,7 +34,7 @@
         "coverage": "node scripts/test.js coverage",
         "audit": "npm audit --audit-level=high",
         "reports": "node scripts/reports.js",
-        "docs": "jsdoc --recurse --destination reports/docs packages/commons/src packages/a/src packages/c/src packages/d/src",
+        "docs": "jsdoc --recurse --destination reports/docs packages/commons/src packages/cl-json-js/src packages/a/src packages/c/src packages/d/src",
         "package": "node -e \"fs.mkdirSync('dist', { recursive: true })\" && npm pack --workspaces --pack-destination dist",
         "deploy": "node scripts/deploy.js",
         "release": "node scripts/release.js"

@@ -13,6 +13,10 @@ not emulated, only its three-tier test separation and its pre-/post-step shape a
 - `commons` (npm `@setmy-info/commons`) - **not a demo**: the real, reusable library of this repo, Spring Boot style
   layered application configuration. The JavaScript row of `clj-commons` / `python-commons` / setmy.info-python's
   `smi_commons` / setmy.info-elixir's `SetmyInfo.Commons` - see "Application configuration" below.
+- `cl-json-js` (npm `@setmy-info/cl-json-js`) - **not a demo**: Common Lisp (CL-WHO style) S-expressions in JSON,
+  evaluated in the browser into DOM changes - a dependency-free server-driven UI runtime, usable from a classic
+  `<script>` tag or bundled (Angular, Vite, ...). **Dual-licensed AGPL-3.0-only or commercial**, unlike the rest of
+  the repository (MIT) - see [its README](packages/cl-json-js/README.md).
 - `a` (`@setmy-info/demo-module-a`) - base module, no local dependencies
 - `b` (`@setmy-info/demo-module-b`) - base module, no local dependencies; **TypeScript**, the typed worked example
 - `c` (`@setmy-info/demo-module-c`) - depends on `a` and `b`
