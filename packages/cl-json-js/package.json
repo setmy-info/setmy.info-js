@@ -38,7 +38,8 @@
         "web",
         "LICENSE",
         "LICENSE-AGPL-3.0.txt",
-        "COMMERCIAL-LICENSE.md"
+        "COMMERCIAL-LICENSE.md",
+        "SECURITY.md"
     ],
     "config": {
         "port": 48241

@@ -266,6 +266,9 @@ The payload is code, so it should come from your server, but the runtime is a sa
   `functions` option): a JavaScript function reachable through the data (`window.eval`, ...) cannot be called;
 - paths refuse `__proto__`, `prototype` and `constructor`; `cl:setf` writes data only, never DOM nodes or `window`.
 
+More - trusting payloads, what is not protected, the `file://` rule of browsers, the development server - in
+[SECURITY.md](SECURITY.md).
+
 ## Development
 
 ```sh
