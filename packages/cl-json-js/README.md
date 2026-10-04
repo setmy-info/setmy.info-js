@@ -163,22 +163,9 @@ leaves the previous view in place.
 
 ## The language
 
-### Evaluation rules
-
-| JSON form                         | Meaning                                                                              |
-| --------------------------------- | ------------------------------------------------------------------------------------ |
-| `[":tag", attributes?, child...]` | an HTML / SVG / MathML element (CL-WHO); children are evaluated and appended         |
-| `["cl:name", arg...]`             | a Common Lisp special form or function                                               |
-| `["pkg:name", arg...]`            | a function from `cl:defun` or the `functions` option                                 |
-| `[other, ...]`                    | a list - every element is evaluated; rendered, a list is a fragment                  |
-| `"text"`, `42`                    | self-evaluating; a string is **always text**, never a variable                       |
-| `null`, `false`, `[]`             | NIL. Everything else is true, `0` and `""` included, as in Lisp                      |
-| `true`, `"cl:t"` / `"cl:nil"`     | T and NIL                                                                            |
-| `{"key": ...}`                    | self-evaluating data; right after a tag, the element's attributes (values evaluated) |
-
-Variables are read with `["cl:getf", "path.to.value"]` (also `cl:symbol-value`, and `cl:assoc` with one argument):
-a dotted path, the first name looked up through the lexical scopes, the rest as properties (`"orders.0.title"`). An
-unbound name or a missing property is NIL.
+A payload is Common Lisp written as JSON: `["cl:if", test, then, else]`, `["cl:getf", "user.name"]` to read a
+variable, `"text"` is always text, and `null` / `false` / `[]` are NIL. What of Common Lisp is supported, what is not
+and the ordered plan for the rest are in [COMMON-LISP.md](COMMON-LISP.md); this section covers only the HTML side.
 
 ### HTML (CL-WHO)
 
@@ -200,59 +187,6 @@ Attribute values are evaluated: NIL / `false` leaves the attribute out, T / `tru
 joined with spaces (`:class ["btn", ["cl:when", ["cl:getf", "active"], "active"]]`), `:style` takes an object
 (`{"color": "red"}`). `:on-<event>` / `:on<event>` attaches a `cl:lambda` (or `["cl:function", "app:fn"]`) as event
 listener; it receives the DOM event (`["cl:getf", "e.target.value"]`).
-
-### Special forms
-
-`cl:quote`, `cl:function`, `cl:progn`, `cl:if`, `cl:when`, `cl:unless`, `cl:cond`, `cl:case` (keys compared with
-keyword colons ignored; `"cl:otherwise"` / `true` default), `cl:and`, `cl:or`, `cl:let`, `cl:let*`, `cl:dolist`,
-`cl:dotimes`, `cl:lambda` (`&optional`, `&rest`), `cl:defun`, `cl:defvar`, `cl:setq`, `cl:setf`, `cl:incf`, `cl:decf`, `cl:push`,
-`cl:getf`, `cl:symbol-value`, `cl:assoc`.
-
-```json
-[
-    "cl:let",
-    [
-        [
-            "total",
-            ["cl:reduce", ["cl:function", "cl:+"], ["cl:mapcar", ["cl:function", "app:price"], ["cl:getf", "orders"]]]
-        ]
-    ],
-    [
-        "cl:cond",
-        [
-            ["cl:zerop", ["cl:getf", "total"]],
-            [":p", "Nothing yet"]
-        ],
-        [true, [":p", ["cl:format", null, "Total: ~,2f", ["cl:getf", "total"]]]]
-    ]
-]
-```
-
-`cl:let`, `cl:dolist`, `cl:dotimes` and lambdas bind in a new scope layer chained with `Object.create`, so inner
-bindings shadow and never leak; `cl:setq` / `cl:setf` assign the nearest binding (unbound names: the state).
-`cl:setf` also takes getf places, as in CL: `["cl:setf", ["cl:getf", ["cl:getf", "todo"], ":done"], true]` sets a
-plist entry (appending it when missing) or an object property.
-
-**Where this differs from Common Lisp**, on purpose: `cl:dolist` and `cl:dotimes` _return the list of body values_ so
-they can produce children (with a result form they return it, as in CL); bodies of `cl:when`, `cl:let`, ... return
-their last value as in CL, so emit several siblings as a list: `["cl:when", c, [[":p", "a"], [":p", "b"]]]`; function
-arity is lenient (an event handler may ignore the event); symbols are namespaced strings (`"cl:car"`, `"app:save"`),
-variables are only read with `cl:getf`.
-
-### Functions
-
-Arithmetic `+ - * / 1+ 1- mod rem abs min max floor ceiling round truncate sqrt expt random`; comparison
-`= /= < > <= >= eq eql equal string= string-equal string< string>`; predicates `not null zerop plusp minusp evenp
-oddp numberp integerp stringp keywordp listp consp atom functionp every some`; lists `list list* cons length first
-car second third rest cdr last nth nthcdr elt append reverse subseq member find find-if position count remove
-remove-if remove-if-not mapcar reduce sort`; data `gethash`; strings `string string-upcase string-downcase
-string-capitalize string-trim parse-integer princ-to-string prin1-to-string concatenate format str`; control
-`funcall apply identity error print`. All prefixed `cl:`.
-
-`cl:format` supports `~a ~s ~d ~b ~o ~x ~f ~$ ~p ~% ~& ~~ ~*`, `~{...~}` iteration (`~^`, `~:{`, `~@{`),
-conditionals `~[...~;...~]`, `~:[false~;true~]`, `~@[...~]` and numeric prefix parameters (`~5d`, `~,2f`, `~:d`).
-Destination `null` returns the string, `true` logs it. `cl:str` is CL-WHO's `str`: the printed arguments, NIL as
-nothing.
 
 ## Security
 

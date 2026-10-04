@@ -39,7 +39,8 @@
         "LICENSE",
         "LICENSE-AGPL-3.0.txt",
         "COMMERCIAL-LICENSE.md",
-        "SECURITY.md"
+        "SECURITY.md",
+        "COMMON-LISP.md"
     ],
     "config": {
         "port": 48241
