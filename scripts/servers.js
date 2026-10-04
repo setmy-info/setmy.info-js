@@ -12,8 +12,9 @@
 // node, detached in the background: pid in build/servers/<module>.pid, output in
 // build/servers/<module>.log. `start` first stops whatever a previous aborted run
 // left behind, then waits until every port answers. The port is read the way the
-// module itself reads it (its src/config), so the SMI_PROFILES / SMI_* environment
-// the instances start with is the one the tests see.
+// module itself reads it (its src/config, or its package.json `config.port`), so
+// the SMI_PROFILES / SMI_* environment the instances start with is the one the
+// tests see.
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -25,7 +26,7 @@ export const ROOT_DIR = path.resolve(
     "..",
 );
 export const STATE_DIR = path.join(ROOT_DIR, "build", "servers");
-export const MODULES = ["a", "b", "c", "d"];
+export const MODULES = ["cl-json-js", "a", "b", "c", "d"];
 const HOST = "127.0.0.1";
 const PORT_ATTEMPTS = 50;
 const PORT_INTERVAL_MS = 200;
@@ -37,10 +38,23 @@ function sourceFile(module, baseName) {
         .find((file) => fs.existsSync(file));
 }
 
-async function modulePort(module) {
-    const { config } = await import(
-        pathToFileURL(sourceFile(module, "config")).href
-    );
+// From the module's src/config (layered configuration, @setmy-info/commons), or
+// for a module without configuration (cl-json-js, a dependency-free library)
+// from `config.port` of its package.json.
+export async function modulePort(module) {
+    const configFile = sourceFile(module, "config");
+    if (!configFile) {
+        const packageJson = path.join(
+            ROOT_DIR,
+            "packages",
+            module,
+            "package.json",
+        );
+        return Number(
+            JSON.parse(fs.readFileSync(packageJson, "utf8")).config.port,
+        );
+    }
+    const { config } = await import(pathToFileURL(configFile).href);
     return Number(config().get("smi.server.port"));
 }
 

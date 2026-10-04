@@ -4,7 +4,7 @@
 //
 //     npm test                    unit
 //     npm run integration-test    integration
-//     npm run e2e-test            e2e
+//     npm run e2e-test            e2e (Selenium specs: an external Selenium Grid, scripts/pageHelper.js)
 //     npm run coverage            all three tiers in one run, under coverage (reports/coverage/lcov.info)
 //
 // Every run also writes JUnit XML to reports/junit/<tier>.xml - what Jenkins' junit
@@ -41,9 +41,14 @@ if (!tier || (tier !== "coverage" && !TIERS.includes(tier))) {
 }
 
 const tiers = tier === "coverage" ? TIERS : [tier];
-const patterns = tiers.map(
-    (name) => `packages/*/test/${name}/**/*.test.{js,ts}`,
-);
+// Package tests, the repository tooling's own tests (scripts/test/<tier>/),
+// and the e2e tier's Selenium specs: <page>.e2e.js / <page>.gherkin.e2e.js
+// (the setmy-info-less naming, scripts/pageHelper.js).
+const patterns = tiers.flatMap((name) => [
+    `packages/*/test/${name}/**/*.test.{js,ts}`,
+    `scripts/test/${name}/**/*.test.js`,
+    ...(name === "e2e" ? ["packages/*/test/e2e/**/*.e2e.js"] : []),
+]);
 const reportsDir = path.join(ROOT_DIR, "reports");
 fs.mkdirSync(path.join(reportsDir, "junit"), { recursive: true });
 
@@ -54,6 +59,13 @@ const args = [
     "--test-reporter=junit",
     `--test-reporter-destination=${path.join(reportsDir, "junit", `${tier}.xml`)}`,
 ];
+
+// One browser at a time: every e2e spec file opens its own Selenium session,
+// and parallel files would compete for the grid's session slots (jest
+// --maxWorkers=1 in setmy-info-less).
+if (tiers.includes("e2e")) {
+    args.push("--test-concurrency=1");
+}
 
 if (tier === "coverage") {
     fs.mkdirSync(path.join(reportsDir, "coverage"), { recursive: true });

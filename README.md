@@ -111,6 +111,32 @@ npm run coverage            # all three tiers in one run, under coverage
 - `test/e2e/` - the package driven end to end; for each demo module real HTTP requests against its own running
   instance, for `commons` its CLI as a real process
 
+Browser e2e follows the setmy.info e2e standard of `setmy-info-less` (and `angular-start-project`), shared by every
+package from `scripts/`:
+
+- `scripts/pageHelper.js` - `selenium-webdriver` against an **external, already running Selenium Grid** (or
+  `smi-selenium-standalone`), Firefox as the baseline, headless by default, a fixed 2000x1200 viewport, one fresh
+  session per rendered page and bounded cleanup (`pageName` / `pageIsRendered` / `pageClose`). The page comes from
+  the package's running instance (the pre-e2e-test phase) as `<name>.html`, or any URL (`file://` too). Assertions read **computed values**
+  (`elementIs()` / `elementIdIs()`: getComputedStyle + getBoundingClientRect, `allStyles`), not mere existence.
+- `scripts/gherkin/` - readable BDD scenarios held as data (`feature` / `scenario` / `given` / `when` / `then`),
+  executed as node:test e2e tests by `runFeature()`; `toGherkin()` writes them back as `.feature` text.
+- Specs: `test/e2e/<page>.e2e.js` and `test/e2e/<page>.gherkin.e2e.js`, the page name taken from the file name
+  (`scripts/testPageName.js`). Tiers that include e2e run one spec file at a time (`--test-concurrency=1`): every file
+  opens its own browser session. Tests of this tooling itself live in `scripts/test/<tier>/`.
+
+| Variable            | Default                          | What                                                                                  |
+| ------------------- | -------------------------------- | ------------------------------------------------------------------------------------- |
+| `SELENIUM_HUB_URL`  | `http://localhost:4444/wd/hub`   | the grid; the shared one is `http://selenium.gintra:4444/wd/hub`                      |
+| `SELENIUM_BROWSER`  | `firefox`                        | browser name                                                                          |
+| `SELENIUM_HEADLESS` | `true`                           | `false` / `0` / `no` / `off` for a visible browser                                    |
+| `E2E_PAGE_HOST`     | loopback, or the route's address | the host the grid's browser calls back on; derived from the route toward a remote hub |
+| `APP_BASE_URL`      | -                                | the whole base URL of the app under test                                              |
+
+With a grid on another machine the browser calls back to this machine: the instance must listen on an address the
+grid node can reach (`cl-json-js` listens on all interfaces) and this machine's firewall must let the grid in on its
+port.
+
 Every run also writes **JUnit XML** to `reports/junit/<tier>.xml` (Node's `junit` reporter) - what Jenkins' `junit`
 step reads.
 

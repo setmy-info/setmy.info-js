@@ -13,12 +13,25 @@ import { renderScripts } from "./index.js";
 export * from "./index.js";
 
 const doc = globalThis.document;
+
+function report(error) {
+    console.error("cl-json-js:", error);
+}
+
+function autorun() {
+    try {
+        renderScripts(doc).catch(report);
+    } catch (error) {
+        report(error);
+    }
+}
+
 const script = doc?.currentScript;
 
 if (doc && script?.getAttribute("data-autorun") !== "false") {
     if (doc.readyState === "loading") {
-        doc.addEventListener("DOMContentLoaded", () => renderScripts(doc));
+        doc.addEventListener("DOMContentLoaded", autorun);
     } else {
-        renderScripts(doc);
+        autorun();
     }
 }

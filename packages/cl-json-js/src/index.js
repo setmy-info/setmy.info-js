@@ -5,6 +5,8 @@
  */
 
 import { mount } from "./cl-sdui-interpreter.js";
+import { ClJsonError } from "./core.js";
+import { include, load } from "./loader.js";
 
 export {
     createInterpreter,
@@ -14,12 +16,14 @@ export {
 } from "./cl-sdui-interpreter.js";
 export { ClJsonError, isTrue, prin1, princ } from "./core.js";
 export { formatString } from "./format.js";
+export { include, load } from "./loader.js";
 
 /** The `type` of a `<script>` element holding a payload. */
 export const SCRIPT_TYPE = "application/cl+json";
 
 /**
- * Mounts every `<script type="application/cl+json">` payload of a page:
+ * Mounts every `<script type="application/cl+json">` payload of a page,
+ * inline or loaded from a file:
  *
  *     <div id="app"></div>
  *     <script type="application/json" id="app-state">{"user": {"name": "Ann"}}</script>
@@ -27,30 +31,77 @@ export const SCRIPT_TYPE = "application/cl+json";
  *         [":h1", ["cl:format", null, "Hello ~a", ["cl:getf", "user.name"]]]
  *     </script>
  *
- * `data-target` is a CSS selector (default: a new `<div>` right after the
- * script), `data-state` the id of a JSON script with the initial state.
+ *     <script type="application/cl+json" src="pages/cart.json" data-target="cart"></script>
+ *
+ * `data-target` is an element id (`app`) or a CSS selector (`#app`, `.slot`);
+ * default: a new `<div>` right after the script. The initial state is the JSON script with id `data-state`, or the
+ * file `data-state-src`. Browsers never load `src` of a non-JavaScript script
+ * type themselves: this loads it - `include()`, see loader.js.
+ *
+ * Inline payloads are mounted before this returns; payloads with `src` once
+ * their files have arrived.
  * @param {ParentNode} [root] Where to look; default `document`.
- * @param {object} [options] Interpreter options, see `createInterpreter`.
- * @returns {import("./cl-sdui-interpreter.js").MountHandle[]} One live view per payload.
+ * @param {object} [options] Interpreter options, see `createInterpreter`, plus
+ *     `fetch` (default `globalThis.fetch`).
+ * @returns {Promise<import("./cl-sdui-interpreter.js").MountHandle[]>} One live view per payload.
  */
 export function renderScripts(root = globalThis.document, options = {}) {
     const doc = options.document ?? root.ownerDocument ?? root;
-    return Array.from(
+    const { fetch: fetchFn, ...interpreterOptions } = options;
+    const mountOptions = { ...interpreterOptions, document: doc };
+
+    function targetOf(script) {
+        const ref = script.getAttribute("data-target");
+        if (ref) {
+            const target =
+                (/^[A-Za-z][\w-]*$/.test(ref) && doc.getElementById(ref)) ||
+                doc.querySelector(ref);
+            if (!target) {
+                throw new ClJsonError(`data-target ${ref}: no such element`);
+            }
+            return target;
+        }
+        const target = doc.createElement("div");
+        script.parentNode.insertBefore(target, script.nextSibling);
+        return target;
+    }
+
+    const views = Array.from(
         root.querySelectorAll(`script[type="${SCRIPT_TYPE}"]`),
         (script) => {
-            const ast = JSON.parse(script.textContent);
+            const target = targetOf(script);
+            const src = script.getAttribute("src");
+            const stateSrc = script.getAttribute("data-state-src");
             const stateId = script.getAttribute("data-state");
             const stateElement = stateId ? doc.getElementById(stateId) : null;
             const state = stateElement
                 ? JSON.parse(stateElement.textContent)
                 : {};
-            const selector = script.getAttribute("data-target");
-            let target = selector ? doc.querySelector(selector) : null;
-            if (!target) {
-                target = doc.createElement("div");
-                script.parentNode.insertBefore(target, script.nextSibling);
+            if (!src && !stateSrc) {
+                return mount(
+                    target,
+                    JSON.parse(script.textContent),
+                    state,
+                    mountOptions,
+                );
             }
-            return mount(target, ast, state, { ...options, document: doc });
+            const loading = stateSrc
+                ? load(stateSrc, { fetch: fetchFn })
+                : Promise.resolve(state);
+            return loading.then((loadedState) =>
+                src
+                    ? include(target, src, loadedState, {
+                          ...mountOptions,
+                          fetch: fetchFn,
+                      })
+                    : mount(
+                          target,
+                          JSON.parse(script.textContent),
+                          loadedState,
+                          mountOptions,
+                      ),
+            );
         },
     );
+    return Promise.all(views);
 }

@@ -4,3 +4,6 @@ package-lock.json
 **/coverage/
 reports/
 build/
+# Hand-formatted Lisp-style JSON-CL payloads (packages/cl-json-js)
+**/*.cl.json
+packages/cl-json-js/web/pages/*.json

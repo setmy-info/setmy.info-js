@@ -145,14 +145,24 @@ export function createInterpreter(options = {}) {
     /**
      * Renders a form into `target` (replacing its children) and keeps it live:
      * an event handler that changes state (cl:setf, cl:incf, ...) re-renders.
-     * @param {Element} target Container element.
+     * @param {Element | string} element Container element, or its id.
      * @param {unknown} ast The JSON form.
      * @param {object} [state] Variables; mutated by cl:setf and friends.
      * @returns {MountHandle} The live view.
      */
-    function mount(target, ast, state = {}) {
+    function mount(element, ast, state = {}) {
+        const target =
+            typeof element === "string"
+                ? documentOf(context(state)).getElementById(
+                      element.replace(/^#/, ""),
+                  )
+                : element;
         if (!isNode(target)) {
-            throw new ClJsonError("mount: target is not a DOM node");
+            throw new ClJsonError(
+                typeof element === "string"
+                    ? `mount: no element with id ${prin1(element)}`
+                    : "mount: target is not a DOM node",
+            );
         }
         let current = ast;
         let active = true;
@@ -217,7 +227,7 @@ export function render(ast, scope = {}, options = {}) {
 
 /**
  * Mounts a live view with a fresh interpreter, see the interpreter's `mount`.
- * @param {Element} target Container element.
+ * @param {Element | string} target Container element, or its id.
  * @param {unknown} ast The JSON form.
  * @param {object} [state] Variables.
  * @param {object} [options] See {@link createInterpreter}.
@@ -596,6 +606,16 @@ const SPECIAL_FORMS = {
         ctx.functions.set(name, lambda(params, body, scope, ctx));
         return name;
     },
+    // (defvar name init): binds a global variable only when it is unbound - a
+    // payload's initial state, kept when its view re-renders.
+    "cl:defvar": ([name, init], scope, ctx) => {
+        checkName(name, "cl:defvar");
+        if (!ownerOf(scope, name)) {
+            // A copy: state changes must not edit the payload's own literals.
+            ctx.root[name] = copyData(evaluate(init, scope, ctx));
+        }
+        return name;
+    },
     "cl:setq": (pairs, scope, ctx) => setPairs(pairs, scope, ctx, "cl:setq"),
     "cl:setf": (pairs, scope, ctx) => setPairs(pairs, scope, ctx, "cl:setf"),
     "cl:incf": ([place, delta], scope, ctx) =>
@@ -675,6 +695,14 @@ const SPECIAL_FORMS = {
         );
     },
 };
+
+function copyData(value) {
+    try {
+        return structuredClone(value);
+    } catch {
+        return value; // functions, DOM nodes: kept as they are
+    }
+}
 
 function setPairs(pairs, scope, ctx, operator) {
     if (pairs.length % 2 !== 0) {

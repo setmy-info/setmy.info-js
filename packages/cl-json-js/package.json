@@ -36,14 +36,17 @@
         "src",
         "dist",
         "web",
-        "example.html",
         "LICENSE",
         "LICENSE-AGPL-3.0.txt",
         "COMMERCIAL-LICENSE.md"
     ],
+    "config": {
+        "port": 48241
+    },
     "scripts": {
         "format": "prettier --write .",
         "lint": "eslint .",
-        "build": "esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2017 --minify --sourcemap --outfile=dist/cl-json.min.js && esbuild src/index.js --bundle --format=esm --platform=browser --target=es2020 --minify --sourcemap --outfile=dist/cl-json.esm.min.js"
+        "build": "esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2017 --minify --sourcemap --outfile=dist/cl-json.min.js && esbuild src/index.js --bundle --format=esm --platform=browser --target=es2020 --minify --sourcemap --outfile=dist/cl-json.esm.min.js && esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2017 --minify --sourcemap --outfile=web/dist/cl-json.min.js",
+        "server": "node src/server.js"
     }
 }

@@ -31,7 +31,7 @@ export interface Interpreter {
     evalCL(ast: Form, scope?: Scope): unknown;
     render(ast: Form, scope?: Scope): Node;
     mount<S extends Scope>(
-        target: Element,
+        target: Element | string,
         ast: Form,
         state?: S,
     ): MountHandle<S>;
@@ -58,15 +58,27 @@ export declare function render(
     options?: InterpreterOptions,
 ): Node;
 export declare function mount<S extends Scope>(
-    target: Element,
+    target: Element | string,
     ast: Form,
     state?: S,
     options?: InterpreterOptions,
 ): MountHandle<S>;
 export declare function renderScripts(
     root?: ParentNode,
-    options?: InterpreterOptions,
-): MountHandle[];
+    options?: InterpreterOptions & { fetch?: typeof fetch },
+): Promise<MountHandle[]>;
+/** Loads a JSON resource (fetch). */
+export declare function load<T = unknown>(
+    url: string,
+    options?: { fetch?: typeof fetch },
+): Promise<T>;
+/** Loads a JSON-CL resource and renders it into an element (or its id); errors are written into it. */
+export declare function include<S extends Scope>(
+    target: Element | string,
+    url: string,
+    state?: S,
+    options?: InterpreterOptions & { fetch?: typeof fetch },
+): Promise<MountHandle<S>>;
 export declare function formatString(control: string, args: unknown[]): string;
 export declare function isTrue(value: unknown): boolean;
 export declare function princ(value: unknown): string;

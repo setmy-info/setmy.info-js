@@ -499,6 +499,42 @@ test("setf on getf places: plists, objects and variable paths", () => {
     );
 });
 
+test("cl:defvar binds only an unbound variable", () => {
+    const state = { kept: 1 };
+    const value = evalCL(
+        [
+            "cl:progn",
+            ["cl:defvar", "kept", 2],
+            ["cl:defvar", "fresh", ["cl:+", 1, 2]],
+            ["cl:defvar", "fresh", 99],
+            ["cl:list", ["cl:getf", "kept"], ["cl:getf", "fresh"]],
+        ],
+        state,
+    );
+    assert.deepEqual(value, [1, 3]);
+    assert.deepEqual(state, { kept: 1, fresh: 3 });
+    assert.throws(
+        () => evalCL(["cl:defvar", "a.b", 1]),
+        /illegal variable name/,
+    );
+
+    const literal = { n: 1 };
+    const copied = {};
+    evalCL(
+        [
+            "cl:progn",
+            ["cl:defvar", "data", ["cl:quote", literal]],
+            ["cl:incf", "data.n"],
+        ],
+        copied,
+    );
+    assert.deepEqual(literal, { n: 1 });
+    assert.deepEqual(copied.data, { n: 2 });
+    const kept = {};
+    evalCL(["cl:defvar", "fn", ["cl:lambda", [], 1]], kept);
+    assert.equal(typeof kept.fn, "function");
+});
+
 test("setf cannot write into DOM nodes", () => {
     const { document, cl } = setup();
     const node = document.createElement("div");

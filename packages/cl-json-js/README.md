@@ -55,11 +55,45 @@ parsed:
 <script src="https://unpkg.com/@setmy-info/cl-json-js"></script>
 ```
 
-`data-target` is a CSS selector (default: a new `<div>` right after the payload), `data-state` the id of a JSON
-script with the initial state. Add `data-autorun="false"` to the library's `<script>` to mount by hand:
+A payload is the content of the tag or, with `src`, a JSON resource - a backend's response or a file next to the
+page - loaded, evaluated and put into the target element:
+
+```html
+<div id="cart"></div>
+<script type="application/cl+json" src="pages/cart.json" data-target="cart"></script>
+```
+
+The same by hand, into any existing element (or its id):
 
 ```js
-const view = ClJson.mount(document.getElementById("app"), await (await fetch("/ui/home")).json(), { user });
+const view = await ClJson.include("cart", "pages/cart.json"); // optional state and options follow
+```
+
+If loading or evaluating fails, the reason is written into the target as text (and its `data-cl-json-error`
+attribute is set). A page opened straight from disk (`file://`) is not allowed to read files by default - unlike
+`<script src>` and `<link href>`, whose content the browser uses itself and never hands to the page; serve it over
+HTTP (or, for local work only, allow it: Firefox `security.fileuri.strict_origin_policy = false`, Chrome
+`--allow-file-access-from-files`).
+
+| Attribute        | What                                                                                                                   |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `src`            | the JSON resource; without it, the tag's content is the payload                                                        |
+| `data-target`    | where to render: an element id (`app`) or a CSS selector (`#app`, `.slot`); default: a new `<div>` right after the tag |
+| `data-state`     | id of a `<script type="application/json">` with the initial state                                                      |
+| `data-state-src` | a JSON resource with the initial state                                                                                 |
+
+A payload can also carry its own initial state with `cl:defvar`, which binds a variable only while it is unbound -
+so state changed by clicks survives the re-renders:
+
+```json
+["cl:progn", ["cl:defvar", "count", 0], [":button", { "on-click": ["cl:lambda", [], ["cl:incf", "count"]] }, "+"]]
+```
+
+Add `data-autorun="false"` to the library's `<script>` to mount by hand - `mount` takes an element or its id:
+
+```js
+const view = ClJson.mount("app", await ClJson.load("pages/home.json"), { user });
+await ClJson.renderScripts(document); // the <script type="application/cl+json"> tags, as autorun does
 ```
 
 ### Bundlers, Angular, any ES module build
@@ -106,15 +140,17 @@ and import maps without a bundler.
 
 ### API
 
-| Function                                  | What                                                                                             |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `evalCL(ast, scope?, options?)`           | evaluates a form; elements come back as DOM nodes, everything else as its value                  |
-| `render(ast, scope?, options?)`           | evaluates into one `Node` (several nodes or text: a `DocumentFragment`)                          |
-| `mount(target, ast, state?, options?)`    | renders into `target` and stays live; returns `{ state, refresh, update, replace, unmount }`     |
-| `createInterpreter(options?)`             | an interpreter with its own function namespace: `{ evalCL, render, mount, defun }`               |
-| `renderScripts(root?, options?)`          | mounts every `<script type="application/cl+json">` under `root` (what the script-tag build runs) |
-| `formatString(control, args)`             | Common Lisp `format nil`                                                                         |
-| `ClJsonError`, `isTrue`, `princ`, `prin1` | the error type, Lisp truthiness and the printers                                                 |
+| Function                                  | What                                                                                                                                      |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `evalCL(ast, scope?, options?)`           | evaluates a form; elements come back as DOM nodes, everything else as its value                                                           |
+| `render(ast, scope?, options?)`           | evaluates into one `Node` (several nodes or text: a `DocumentFragment`)                                                                   |
+| `mount(target, ast, state?, options?)`    | renders into `target` (an element or its id) and stays live; returns `{ state, refresh, update, replace, unmount }`                       |
+| `createInterpreter(options?)`             | an interpreter with its own function namespace: `{ evalCL, render, mount, defun }`                                                        |
+| `renderScripts(root?, options?)`          | mounts every `<script type="application/cl+json">` under `root`, inline or `src`; a Promise of the views (what the script-tag build runs) |
+| `include(target, url, state?, options?)`  | loads a JSON-CL resource and renders it into an element or its id (what `src` does); errors are written into it                           |
+| `load(url, options?)`                     | loads and parses a JSON resource                                                                                                          |
+| `formatString(control, args)`             | Common Lisp `format nil`                                                                                                                  |
+| `ClJsonError`, `isTrue`, `princ`, `prin1` | the error type, Lisp truthiness and the printers                                                                                          |
 
 Options: `document` (default `globalThis.document`; pass one to run outside the browser) and `functions`, host
 functions by qualified name (`{ "app:save": (data) => ... }`) that payloads call as `["app:save", ...]`.
@@ -169,7 +205,7 @@ listener; it receives the DOM event (`["cl:getf", "e.target.value"]`).
 
 `cl:quote`, `cl:function`, `cl:progn`, `cl:if`, `cl:when`, `cl:unless`, `cl:cond`, `cl:case` (keys compared with
 keyword colons ignored; `"cl:otherwise"` / `true` default), `cl:and`, `cl:or`, `cl:let`, `cl:let*`, `cl:dolist`,
-`cl:dotimes`, `cl:lambda` (`&optional`, `&rest`), `cl:defun`, `cl:setq`, `cl:setf`, `cl:incf`, `cl:decf`, `cl:push`,
+`cl:dotimes`, `cl:lambda` (`&optional`, `&rest`), `cl:defun`, `cl:defvar`, `cl:setq`, `cl:setf`, `cl:incf`, `cl:decf`, `cl:push`,
 `cl:getf`, `cl:symbol-value`, `cl:assoc`.
 
 ```json
@@ -237,9 +273,34 @@ npm test                                   # from the repository root: every pac
 npm run build -w @setmy-info/cl-json-js     # dist/cl-json.min.js (IIFE, global ClJson) + dist/cl-json.esm.min.js
 ```
 
-Then open `example.html` in a browser (straight from disk, no server): FizzBuzz, a shopping cart, a todo list and
-an SVG chart, each with its JSON-CL source - editable, re-rendered as you type - next to the live result and state. The unit tests run in Node against a minimal fake DOM
-(`test/unit/fake-dom.js`) - no jsdom.
+`web/index.html` is a plain HTML page: home (the reference payload), FizzBuzz, a shopping cart and a todo list as
+`<script type="application/cl+json" src="pages/<name>.json">` tags, an SVG chart loaded with `ClJson.include()`, and
+one inline payload. Each JSON file is loaded, evaluated and put into its element.
+
+```sh
+npm run build -w @setmy-info/cl-json-js     # also copies the script-tag build to web/dist/
+npm run server -w @setmy-info/cl-json-js    # src/server.js serves web/ - http://127.0.0.1:48241/
+```
+
+`web/pages/*.json` and `*.cl.json` files are excluded from Prettier, to keep their Lisp-style layout.
+
+Tests, the repository's three tiers (`node --test`, run from the repository root):
+
+| Tier        | Where               | What                                                                                               |
+| ----------- | ------------------- | -------------------------------------------------------------------------------------------------- |
+| unit        | `test/unit/`        | the interpreter, `cl:format`, the builtins, `renderScripts`, against a minimal fake DOM - no jsdom |
+| integration | `test/integration/` | every real file of `web/` read from disk and evaluated: `pages/*.json`, the inline payload         |
+| e2e         | `test/e2e/`         | the running instance over HTTP (`server.test.js`), and `index.html` in a real Firefox via Selenium |
+
+The browser specs follow the setmy.info e2e standard (see the repository README, "Tests"): `scripts/pageHelper.js`
+against an external Selenium Grid, `index.e2e.js` and its Gherkin twin `index.gherkin.e2e.js`. They assert computed
+values (colors, text decoration, sizes, SVG attributes) as well as text, and open the page from `file://` too when
+the grid's browser runs on this machine: with file reading allowed it renders, with a desktop Firefox's default each
+target shows why it can not.
+
+```sh
+npm run pre-e2e-test && npm run e2e-test; npm run post-e2e-test     # starts/stops the instances (scripts/servers.js)
+```
 
 ## License
 
