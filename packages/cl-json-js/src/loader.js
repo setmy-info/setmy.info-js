@@ -80,13 +80,27 @@ export async function include(target, url, state = {}, options = {}) {
         const ast = await load(url, { fetch: fetchFn });
         return mount(element, ast, state, interpreterOptions);
     } catch (error) {
-        while (element.firstChild) {
-            element.removeChild(element.firstChild);
-        }
-        element.appendChild(
-            (element.ownerDocument ?? doc).createTextNode(error.message),
-        );
-        element.setAttribute("data-cl-json-error", "");
+        showError(element, error, doc);
         throw error;
     }
+}
+
+/**
+ * Replaces an element's content with an error's message and marks it with
+ * `data-cl-json-error` - how a payload that could not be loaded or
+ * evaluated shows why, instead of leaving its target empty.
+ * @param {Element} element The target.
+ * @param {Error} error The failure.
+ * @param {Document} [doc] The document, when the element has no owner.
+ */
+export function showError(element, error, doc) {
+    while (element.firstChild) {
+        element.removeChild(element.firstChild);
+    }
+    element.appendChild(
+        (element.ownerDocument ?? doc).createTextNode(
+            error instanceof Error ? error.message : String(error),
+        ),
+    );
+    element.setAttribute("data-cl-json-error", "");
 }

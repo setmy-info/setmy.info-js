@@ -68,6 +68,22 @@ function numbers(args, operator) {
     return args;
 }
 
+function number(value, operator) {
+    return numbers([value], operator)[0];
+}
+
+// The divisor of mod, rem, floor, ... : a number other than zero.
+function divisor(value, operator) {
+    if (number(value, operator) === 0) {
+        throw new ClJsonError(`${operator}: division by zero`);
+    }
+    return value;
+}
+
+function last(args) {
+    return args[args.length - 1];
+}
+
 function chain(operator, test) {
     return (...args) => {
         numbers(args, operator);
@@ -104,8 +120,9 @@ function stringDesignator(value) {
     return typeof value === "string" ? keywordName(value) : princ(value);
 }
 
+// The result type: "list" / ":list" / "cl:list" (and the same for "string").
 function concatenate(type, ...sequences) {
-    if (keywordName(String(type)).replace(/^'/, "") === "list") {
+    if (keywordName(String(type)).replace(/^cl:/, "") === "list") {
         return sequences.flatMap((sequence) =>
             list(sequence, "cl:concatenate"),
         );
@@ -146,21 +163,30 @@ export const BUILTINS = {
             ? 1 / first
             : rest.reduce((a, b) => a / b, first);
     },
-    "cl:1+": (n) => numbers([n], "cl:1+")[0] + 1,
-    "cl:1-": (n) => numbers([n], "cl:1-")[0] - 1,
-    "cl:mod": (a, b) => ((a % b) + b) % b,
-    "cl:rem": (a, b) => a % b,
-    "cl:abs": (n) => Math.abs(n),
+    "cl:1+": (n) => number(n, "cl:1+") + 1,
+    "cl:1-": (n) => number(n, "cl:1-") - 1,
+    "cl:mod": (a, b) => {
+        numbers([a], "cl:mod");
+        divisor(b, "cl:mod");
+        return ((a % b) + b) % b;
+    },
+    "cl:rem": (a, b) => number(a, "cl:rem") % divisor(b, "cl:rem"),
+    "cl:abs": (n) => Math.abs(number(n, "cl:abs")),
     "cl:min": (...args) => Math.min(...numbers(args, "cl:min")),
     "cl:max": (...args) => Math.max(...numbers(args, "cl:max")),
-    "cl:floor": (a, b = 1) => Math.floor(a / b),
-    "cl:ceiling": (a, b = 1) => Math.ceil(a / b),
-    "cl:round": (a, b = 1) => Math.round(a / b),
-    "cl:truncate": (a, b = 1) => Math.trunc(a / b),
-    "cl:sqrt": (n) => Math.sqrt(n),
-    "cl:expt": (base, power) => base ** power,
+    "cl:floor": (a, b = 1) =>
+        Math.floor(number(a, "cl:floor") / divisor(b, "cl:floor")),
+    "cl:ceiling": (a, b = 1) =>
+        Math.ceil(number(a, "cl:ceiling") / divisor(b, "cl:ceiling")),
+    "cl:round": (a, b = 1) =>
+        Math.round(number(a, "cl:round") / divisor(b, "cl:round")),
+    "cl:truncate": (a, b = 1) =>
+        Math.trunc(number(a, "cl:truncate") / divisor(b, "cl:truncate")),
+    "cl:sqrt": (n) => Math.sqrt(number(n, "cl:sqrt")),
+    "cl:expt": (base, power) =>
+        number(base, "cl:expt") ** number(power, "cl:expt"),
     "cl:random": (n) => {
-        const r = Math.random() * n;
+        const r = Math.random() * number(n, "cl:random");
         return Number.isInteger(n) ? Math.floor(r) : r;
     },
 
@@ -183,11 +209,11 @@ export const BUILTINS = {
     // Predicates
     "cl:not": (value) => !isTrue(value),
     "cl:null": (value) => !isTrue(value),
-    "cl:zerop": (n) => n === 0,
-    "cl:plusp": (n) => n > 0,
-    "cl:minusp": (n) => n < 0,
-    "cl:evenp": (n) => n % 2 === 0,
-    "cl:oddp": (n) => Math.abs(n % 2) === 1,
+    "cl:zerop": (n) => number(n, "cl:zerop") === 0,
+    "cl:plusp": (n) => number(n, "cl:plusp") > 0,
+    "cl:minusp": (n) => number(n, "cl:minusp") < 0,
+    "cl:evenp": (n) => number(n, "cl:evenp") % 2 === 0,
+    "cl:oddp": (n) => Math.abs(number(n, "cl:oddp") % 2) === 1,
     "cl:numberp": (value) => typeof value === "number",
     "cl:integerp": (value) => Number.isInteger(value),
     "cl:stringp": (value) => typeof value === "string",
@@ -213,7 +239,7 @@ export const BUILTINS = {
     "cl:list": (...args) => args,
     "cl:list*": (...args) => [
         ...args.slice(0, -1),
-        ...list(args.at(-1), "cl:list*"),
+        ...list(last(args), "cl:list*"),
     ],
     "cl:cons": (item, rest) => [item, ...list(rest, "cl:cons")],
     "cl:length": (sequence) =>
@@ -351,7 +377,7 @@ export const BUILTINS = {
     // Functions and conditions
     "cl:funcall": (fn, ...args) => funcall(fn, args),
     "cl:apply": (fn, ...args) =>
-        funcall(fn, [...args.slice(0, -1), ...list(args.at(-1), "cl:apply")]),
+        funcall(fn, [...args.slice(0, -1), ...list(last(args), "cl:apply")]),
     "cl:identity": (value) => value,
     "cl:error": (control, ...args) => {
         throw new ClJsonError(formatString(String(control), args));

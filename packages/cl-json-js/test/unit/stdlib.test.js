@@ -145,9 +145,11 @@ test("builtins", () => {
         [["cl:prin1-to-string", 'a"b'], '"a\\"b"'],
         [["cl:concatenate", "string", "a", L("b", "c"), 1], "abc1"],
         [
-            ["cl:concatenate", "'list", L(1), L(2)],
+            ["cl:concatenate", "cl:list", L(1), L(2)],
             [1, 2],
         ],
+        [["cl:concatenate", ":list", L(1), null], [1]],
+        [["cl:concatenate", "cl:string", "a", "b"], "ab"],
         [["cl:str", "a", null, 1, false, "b"], "a1b"],
         [["cl:funcall", F("cl:+"), 1, 2], 3],
         [["cl:apply", F("cl:+"), 1, L(2, 3)], 6],
@@ -167,6 +169,30 @@ test("builtin errors", () => {
     assert.throws(() => evalCL(["cl:<", 1, "2"]), /not a number/);
     assert.throws(() => evalCL(["cl:/", 1, 0]), /division by zero/);
     assert.throws(() => evalCL(["cl:/", 0]), /division by zero/);
+    for (const op of [
+        "cl:mod",
+        "cl:rem",
+        "cl:floor",
+        "cl:ceiling",
+        "cl:round",
+        "cl:truncate",
+    ]) {
+        assert.throws(() => evalCL([op, "7", 2]), /not a number/, op);
+        assert.throws(() => evalCL([op, 7, 0]), /division by zero/, op);
+    }
+    for (const op of [
+        "cl:abs",
+        "cl:sqrt",
+        "cl:random",
+        "cl:zerop",
+        "cl:plusp",
+        "cl:minusp",
+        "cl:evenp",
+        "cl:oddp",
+    ]) {
+        assert.throws(() => evalCL([op, null]), /not a number: NIL/, op);
+    }
+    assert.throws(() => evalCL(["cl:expt", 2, "x"]), /not a number/);
     assert.throws(() => evalCL(["cl:car", 5]), /not a list/);
     assert.throws(() => evalCL(["cl:parse-integer", "x"]), /not an integer/);
     assert.throws(() => evalCL(["cl:error", "Boom ~a", 1]), /Boom 1/);
@@ -230,6 +256,8 @@ test("format directives", () => {
         ["~{~}", [[1]], ""],
         ["~:[no~;yes~] ~:[no~;yes~]", [true, null], "yes no"],
         ["~[zero~;one~;two~]|~1[a~;b~]|~[x~]", [2, 5], "two|b|"],
+        ["~[a~;b~:;many~] ~[a~;b~:;many~]", [1, 7], "b many"],
+        ["~,2f ~$", ["n/a", null], "n/a NIL"],
         ["~@[<~a>~]~@[<~a>~]", [null, "x"], "<x>"],
         ["one ~\n      two", [], "one two"],
     ];

@@ -15,26 +15,31 @@
         "template"
     ],
     "type": "module",
+    "engines": {
+        "node": ">=24.0.0"
+    },
     "sideEffects": [
-        "./src/browser.js"
+        "./src/browser.js",
+        "./dist/cl-json.min.js"
     ],
-    "main": "./src/index.js",
-    "module": "./src/index.js",
-    "types": "./src/index.d.ts",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
     "unpkg": "./dist/cl-json.min.js",
     "jsdelivr": "./dist/cl-json.min.js",
     "exports": {
         ".": {
-            "types": "./src/index.d.ts",
-            "default": "./src/index.js"
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
         },
+        "./config": "./dist/config.js",
+        "./server": "./dist/server.js",
         "./browser": "./dist/cl-json.min.js",
         "./esm": "./dist/cl-json.esm.min.js",
         "./package.json": "./package.json"
     },
     "files": [
-        "src",
         "dist",
+        "resources",
         "web",
         "LICENSE",
         "LICENSE-AGPL-3.0.txt",
@@ -42,13 +47,13 @@
         "SECURITY.md",
         "COMMON-LISP.md"
     ],
-    "config": {
-        "port": 48241
+    "dependencies": {
+        "@setmy-info/commons": "1.0.0"
     },
     "scripts": {
         "format": "prettier --write .",
         "lint": "eslint .",
-        "build": "esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2017 --minify --sourcemap --outfile=dist/cl-json.min.js && esbuild src/index.js --bundle --format=esm --platform=browser --target=es2020 --minify --sourcemap --outfile=dist/cl-json.esm.min.js && esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2017 --minify --sourcemap --outfile=web/dist/cl-json.min.js",
+        "build": "esbuild src/index.js src/config.js src/server.js --bundle --packages=external --format=esm --platform=node --target=node24 --sourcemap --outdir=dist && node -e \"fs.copyFileSync('src/index.d.ts', 'dist/index.d.ts')\" && esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2020 --minify --sourcemap --outfile=dist/cl-json.min.js && esbuild src/index.js --bundle --format=esm --platform=browser --target=es2020 --minify --sourcemap --outfile=dist/cl-json.esm.min.js && esbuild src/browser.js --bundle --format=iife --global-name=ClJson --platform=browser --target=es2020 --minify --sourcemap --outfile=web/dist/cl-json.min.js",
         "server": "node src/server.js"
     }
 }

@@ -7,8 +7,9 @@
 import { ClJsonError, isTrue, prin1, princ } from "./core.js";
 
 // The FORMAT subset templates need: ~a ~s ~d ~b ~o ~x ~f ~$ ~p ~% ~& ~~ ~*,
-// iteration ~{ ~} (with ~^ and ~:{), conditionals ~[ ~; ~] / ~:[ / ~@[ and
-// tilde-newline. Prefix parameters are numeric only (~5d, ~,2f).
+// iteration ~{ ~} (with ~^ and ~:{), conditionals ~[ ~; ~] (with a ~:; default
+// clause) / ~:[ / ~@[ and tilde-newline. Prefix parameters are numeric only
+// (~5d, ~,2f).
 const DIRECTIVE = /^~([0-9,]*)([:@]*)([\s\S])/;
 
 /**
@@ -55,7 +56,7 @@ function parse(control, start, stops) {
             at: match[2].includes("@"),
         };
         if (stops.includes(node.d)) {
-            return { nodes, i, stop: node.d };
+            return { nodes, i, stop: node.d, colon: node.colon };
         }
         if (node.d === "{") {
             const body = parse(control, i, ["}"]);
@@ -75,6 +76,10 @@ function parse(control, start, stops) {
                 i = clause.i;
                 if (clause.stop === "]") {
                     break;
+                }
+                if (clause.colon) {
+                    // ~:; - the clause that follows is the default.
+                    node.fallback = node.clauses.length;
                 }
             }
         } else if (node.d === "\n") {
@@ -148,7 +153,11 @@ function run(nodes, state) {
                 break;
             case "f":
             case "$": {
-                const value = Number(next(state));
+                const value = next(state);
+                if (typeof value !== "number") {
+                    state.out += princ(value); // as ~a, like CL does
+                    break;
+                }
                 const digits = node.params[node.d === "$" ? 0 : 1];
                 const text =
                     digits !== undefined || node.d === "$"
@@ -246,7 +255,11 @@ function conditional(node, state) {
         }
     } else {
         const index = node.params[0] ?? next(state);
-        clause = node.clauses[index];
+        clause =
+            node.clauses[index] ??
+            (node.fallback === undefined
+                ? undefined
+                : node.clauses[node.fallback]);
     }
     if (clause) {
         run(clause, state);

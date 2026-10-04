@@ -1,0 +1,8 @@
+application:
+    name: cl-json-js
+smi:
+    server:
+        host: 0.0.0.0
+        port: 48241
+    log:
+        level: debug

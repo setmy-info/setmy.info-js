@@ -2,57 +2,64 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>cl-json-js</title>
     </head>
     <body>
-        <h1>cl-json-js</h1>
-        <p>
-            Every section below is a JSON-CL file in <code>pages/</code>,
-            loaded, evaluated and put into the DOM - by a
-            <code>&lt;script type="application/cl+json" src&gt;</code> tag, or
-            by calling <code>ClJson.include()</code>. Serve this folder over
-            HTTP: browsers do not let a page opened from disk read files.
-        </p>
+        <main>
+            <h1>cl-json-js web example</h1>
+            <p>
+                This page is served from <code>packages/cl-json-js/web</code> by
+                the module's own instance (<code
+                    >npm run server -w @setmy-info/cl-json-js</code
+                >) on the port from its <code>resources/application.yaml</code>.
+                Every section below is a JSON-CL file in <code>pages/</code>,
+                loaded, evaluated and put into the DOM - by a
+                <code>&lt;script type="application/cl+json" src&gt;</code> tag,
+                or by calling <code>ClJson.include()</code>. Serve this folder
+                over HTTP: browsers do not let a page opened from disk read
+                files.
+            </p>
 
-        <h2>Home</h2>
-        <div id="home"></div>
-        <script
-            type="application/cl+json"
-            src="pages/home.json"
-            data-target="home"
-        ></script>
+            <h2>Home</h2>
+            <div id="home"></div>
+            <script
+                type="application/cl+json"
+                src="pages/home.json"
+                data-target="home"
+            ></script>
 
-        <h2>FizzBuzz</h2>
-        <div id="fizzbuzz"></div>
-        <script
-            type="application/cl+json"
-            src="pages/fizzbuzz.json"
-            data-target="fizzbuzz"
-        ></script>
+            <h2>FizzBuzz</h2>
+            <div id="fizzbuzz"></div>
+            <script
+                type="application/cl+json"
+                src="pages/fizzbuzz.json"
+                data-target="fizzbuzz"
+            ></script>
 
-        <h2>Cart</h2>
-        <div id="cart"></div>
-        <script
-            type="application/cl+json"
-            src="pages/cart.json"
-            data-target="cart"
-        ></script>
+            <h2>Cart</h2>
+            <div id="cart"></div>
+            <script
+                type="application/cl+json"
+                src="pages/cart.json"
+                data-target="cart"
+            ></script>
 
-        <h2>Todos</h2>
-        <div id="todos"></div>
-        <script
-            type="application/cl+json"
-            src="pages/todos.json"
-            data-target="todos"
-        ></script>
+            <h2>Todos</h2>
+            <div id="todos"></div>
+            <script
+                type="application/cl+json"
+                src="pages/todos.json"
+                data-target="todos"
+            ></script>
 
-        <h2>Chart</h2>
-        <div id="chart"></div>
+            <h2>Chart</h2>
+            <div id="chart"></div>
 
-        <h2>Inline</h2>
-        <div id="inline"></div>
-        <!-- prettier-ignore -->
-        <script type="application/cl+json" data-target="inline">
+            <h2>Inline</h2>
+            <div id="inline"></div>
+            <!-- prettier-ignore -->
+            <script type="application/cl+json" data-target="inline">
 ["cl:progn",
   ["cl:defvar", "count", 0],
   [":p", "This one is the content of the script tag itself: ",
@@ -60,6 +67,7 @@
     " ",
     ["cl:format", null, "clicked ~d time~:p", ["cl:getf", "count"]]]]
         </script>
+        </main>
 
         <script src="dist/cl-json.min.js"></script>
         <script>

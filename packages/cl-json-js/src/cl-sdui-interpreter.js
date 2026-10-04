@@ -48,7 +48,12 @@ const URL_ATTRIBUTES = new Set([
     "cite",
     "background",
     "ping",
+    "data",
 ]);
+// Elements that only ever draw a resource: the one place an SVG data: URL
+// (which may carry script) is harmless.
+const IMAGE_TAGS = new Set(["img", "image"]);
+const LAMBDA_LIST_KEYWORDS = new Set(["&optional", "&rest"]);
 const FUNCTION_NAME = /^[A-Za-z][\w-]*:[^\s:/][^\s:]*$/;
 const TAG_NAME = /^[A-Za-z][\w.-]*$/;
 const ATTRIBUTE_NAME = /^[A-Za-z_][\w:.-]*$/;
@@ -369,25 +374,36 @@ function lookup(scope, path, operator) {
 
 function assign(scope, path, value, ctx, operator) {
     const segments = splitPath(path, operator);
-    const last = segments.at(-1);
+    const last = segments[segments.length - 1];
     let target;
     if (segments.length === 1) {
         target = ownerOf(scope, last) ?? ctx.root;
     } else {
         target = lookup(scope, segments.slice(0, -1).join("."), operator);
-        // Data only: no writing into DOM nodes (innerHTML, ...) or the window.
-        if (
-            target === null ||
-            typeof target !== "object" ||
-            isNode(target) ||
-            target === globalThis
-        ) {
+        // Data only: no writing into DOM nodes (innerHTML, ...), the window
+        // or any other host object reachable from an event (location,
+        // storage, styles) - plain objects and arrays, as JSON gives them.
+        if (!isDataObject(target)) {
             throw new ClJsonError(`${operator}: no data place ${prin1(path)}`);
         }
     }
     target[last] = value;
     ctx.shared.dirty = true;
     return value;
+}
+
+// Plain data: an array, or an object with no prototype but Object's - what
+// JSON.parse and the payload's own literals produce. Class instances, DOM
+// nodes, Location, Storage and the like are not.
+function isDataObject(value) {
+    if (Array.isArray(value)) {
+        return true;
+    }
+    if (value === null || typeof value !== "object" || value === globalThis) {
+        return false;
+    }
+    const proto = Object.getPrototypeOf(value);
+    return proto === Object.prototype || proto === null;
 }
 
 function child(scope, bindings) {
@@ -427,8 +443,12 @@ function lambda(params, body, scope, ctx) {
     let rest = null;
     let mode = "required";
     for (const param of params) {
-        if (param === "&optional" || param === "&rest") {
+        if (LAMBDA_LIST_KEYWORDS.has(param)) {
             mode = param;
+        } else if (typeof param === "string" && param.startsWith("&")) {
+            throw new ClJsonError(
+                `cl:lambda: unsupported lambda list keyword ${param} (only &optional and &rest)`,
+            );
         } else if (mode === "required") {
             required.push(checkName(param, "cl:lambda"));
         } else if (mode === "&optional") {
@@ -474,7 +494,9 @@ const SPECIAL_FORMS = {
         if (Array.isArray(designator)) {
             return evaluate(designator, scope, ctx);
         }
-        const fn = BUILTINS[designator] ?? ctx.functions.get(designator);
+        const fn = Object.prototype.hasOwnProperty.call(BUILTINS, designator)
+            ? BUILTINS[designator]
+            : ctx.functions.get(designator);
         if (!fn) {
             throw new ClJsonError(`Undefined function: ${prin1(designator)}`);
         }
@@ -619,23 +641,9 @@ const SPECIAL_FORMS = {
     "cl:setq": (pairs, scope, ctx) => setPairs(pairs, scope, ctx, "cl:setq"),
     "cl:setf": (pairs, scope, ctx) => setPairs(pairs, scope, ctx, "cl:setf"),
     "cl:incf": ([place, delta], scope, ctx) =>
-        assign(
-            scope,
-            place,
-            lookup(scope, place, "cl:incf") +
-                (delta === undefined ? 1 : evaluate(delta, scope, ctx)),
-            ctx,
-            "cl:incf",
-        ),
+        step(place, delta, 1, scope, ctx, "cl:incf"),
     "cl:decf": ([place, delta], scope, ctx) =>
-        assign(
-            scope,
-            place,
-            lookup(scope, place, "cl:decf") -
-                (delta === undefined ? 1 : evaluate(delta, scope, ctx)),
-            ctx,
-            "cl:decf",
-        ),
+        step(place, delta, -1, scope, ctx, "cl:decf"),
     "cl:push": ([item, place], scope, ctx) => {
         const current = lookup(scope, place, "cl:push");
         return assign(
@@ -696,12 +704,43 @@ const SPECIAL_FORMS = {
     },
 };
 
-function copyData(value) {
-    try {
-        return structuredClone(value);
-    } catch {
-        return value; // functions, DOM nodes: kept as they are
+// (incf place delta) and (decf place delta): numbers only, as in CL.
+function step(place, delta, sign, scope, ctx, operator) {
+    const current = lookup(scope, place, operator);
+    const amount = delta === undefined ? 1 : evaluate(delta, scope, ctx);
+    for (const value of [current, amount]) {
+        if (typeof value !== "number") {
+            throw new ClJsonError(`${operator}: not a number: ${prin1(value)}`);
+        }
     }
+    return assign(scope, place, current + sign * amount, ctx, operator);
+}
+
+// A deep copy of the plain data (arrays, plain objects); functions, DOM nodes
+// and other host objects are kept as they are.
+function copyData(value, seen = new Map()) {
+    if (!isDataObject(value)) {
+        return value;
+    }
+    if (seen.has(value)) {
+        return seen.get(value);
+    }
+    if (Array.isArray(value)) {
+        const copy = [];
+        seen.set(value, copy);
+        for (const item of value) {
+            copy.push(copyData(item, seen));
+        }
+        return copy;
+    }
+    const copy = {};
+    seen.set(value, copy);
+    for (const [key, item] of Object.entries(value)) {
+        if (!FORBIDDEN_SEGMENTS.has(key)) {
+            copy[key] = copyData(item, seen);
+        }
+    }
+    return copy;
 }
 
 function setPairs(pairs, scope, ctx, operator) {
@@ -751,11 +790,7 @@ function assignPlace(place, value, scope, ctx, operator) {
         }
     } else {
         const key = keywordName(String(indicator));
-        if (
-            !isPlainObject(target) ||
-            target === globalThis ||
-            FORBIDDEN_SEGMENTS.has(key)
-        ) {
+        if (!isDataObject(target) || FORBIDDEN_SEGMENTS.has(key)) {
             throw new ClJsonError(`${operator}: no data place ${prin1(place)}`);
         }
         target[key] = value;
@@ -844,16 +879,23 @@ function element(form, scope, ctx) {
     return el;
 }
 
-function isUnsafeUrl(value) {
+// javascript: and vbscript: never; data: only for images - and an SVG image
+// (which may carry script) only where it is merely drawn (<img>, <image>).
+function isUnsafeUrl(value, tag) {
     const compact = [...value]
         .filter((c) => c.charCodeAt(0) > 32)
         .join("")
         .toLowerCase();
-    return (
-        compact.startsWith("javascript:") ||
-        compact.startsWith("vbscript:") ||
-        (compact.startsWith("data:") && !compact.startsWith("data:image/"))
-    );
+    if (compact.startsWith("javascript:") || compact.startsWith("vbscript:")) {
+        return true;
+    }
+    if (!compact.startsWith("data:")) {
+        return false;
+    }
+    if (!compact.startsWith("data:image/")) {
+        return true;
+    }
+    return compact.startsWith("data:image/svg") && !IMAGE_TAGS.has(tag);
 }
 
 function attributeText(name, value) {
@@ -893,9 +935,13 @@ function setAttribute(el, rawName, value, ctx) {
             name[2] === "-" ? name.slice(3) : name.slice(2).toLowerCase();
         el.addEventListener(type, (event) => {
             ctx.shared.dirty = false;
-            value(event);
-            if (ctx.shared.dirty && ctx.shared.afterEvent) {
-                ctx.shared.afterEvent();
+            try {
+                value(event);
+            } finally {
+                // State changed before an error too: show it, not a stale view.
+                if (ctx.shared.dirty && ctx.shared.afterEvent) {
+                    ctx.shared.afterEvent();
+                }
             }
         });
         return;
@@ -908,7 +954,10 @@ function setAttribute(el, rawName, value, ctx) {
         return;
     }
     const text = attributeText(name, value);
-    if (URL_ATTRIBUTES.has(lower) && isUnsafeUrl(text)) {
+    if (
+        URL_ATTRIBUTES.has(lower) &&
+        isUnsafeUrl(text, String(el.localName ?? el.tagName).toLowerCase())
+    ) {
         return;
     }
     if (lower.startsWith("xlink:")) {

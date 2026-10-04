@@ -163,6 +163,27 @@ test("unsafe URLs, srcdoc and script tags are refused", () => {
             .getAttribute("src"),
         "data:image/png;base64,AA==",
     );
+    // <object data>, and SVG data: URLs anywhere but in an image.
+    const svgUrl = "data:image/svg+xml,<svg onload=alert(1)>";
+    assert.equal(
+        html(cl.evalCL([":object", { data: "javascript:alert(1)" }])),
+        "<object></object>",
+    );
+    assert.equal(
+        html(cl.evalCL([":iframe", { src: svgUrl }])),
+        "<iframe></iframe>",
+    );
+    assert.equal(html(cl.evalCL([":a", { href: svgUrl }])), "<a></a>");
+    assert.equal(
+        cl.evalCL([":img", { src: svgUrl }]).getAttribute("src"),
+        svgUrl,
+    );
+    assert.equal(
+        cl
+            .evalCL([":svg", [":image", { href: svgUrl }]])
+            .childNodes[0].getAttribute("href"),
+        svgUrl,
+    );
     assert.throws(() => cl.evalCL([":script", "alert(1)"]), ClJsonError);
     assert.throws(
         () => cl.evalCL([":div", { onclick: "alert(1)" }]),
@@ -400,6 +421,21 @@ test("lambda, funcall, defun and host functions", () => {
         () => cl.evalCL(["cl:lambda", "x"]),
         /parameters must be a list/,
     );
+    for (const keyword of ["&key", "&body", "&aux"]) {
+        assert.throws(
+            () => cl.evalCL(["cl:lambda", ["a", keyword, "b"], 1]),
+            /unsupported lambda list keyword/,
+            keyword,
+        );
+    }
+    // Only the builtins themselves, not Object.prototype's keys.
+    for (const name of ["__proto__", "constructor", "toString"]) {
+        assert.throws(
+            () => cl.evalCL(["cl:function", name]),
+            /Undefined function/,
+            name,
+        );
+    }
 });
 
 test("plain JavaScript functions found in scope cannot be called", () => {
@@ -449,6 +485,12 @@ test("setq, setf, incf, decf and push mutate the owning binding", () => {
     });
     assert.throws(() => evalCL(["cl:setq", "a"]), /odd number/);
     assert.throws(() => evalCL(["cl:setf", "nobody.name", 1]), /no data place/);
+    assert.throws(() => evalCL(["cl:incf", "s"], { s: "a" }), /not a number/);
+    assert.throws(() => evalCL(["cl:incf", "n"]), /not a number: NIL/);
+    assert.throws(
+        () => evalCL(["cl:decf", "n", "1"], { n: 1 }),
+        /not a number/,
+    );
     assert.throws(
         () => evalCL(["cl:let", [[1, 2]], 1]),
         /illegal variable name/,
@@ -535,13 +577,100 @@ test("cl:defvar binds only an unbound variable", () => {
     assert.equal(typeof kept.fn, "function");
 });
 
-test("setf cannot write into DOM nodes", () => {
+test("setf writes plain data only: no DOM nodes, window or other host objects", () => {
     const { document, cl } = setup();
     const node = document.createElement("div");
     assert.throws(
         () => cl.evalCL(["cl:setf", "el.innerHTML", "<b>"], { el: node }),
         /no data place/,
     );
+    // What an event gives access to: e.view (window), its location, storage,
+    // the target's style - host objects, not data.
+    class Location {
+        constructor() {
+            this.href = "/";
+        }
+    }
+    const event = {
+        view: globalThis,
+        location: new Location(),
+        storage: Object.create({ setItem() {} }),
+        style: new Map(),
+    };
+    for (const path of [
+        "e.view.name",
+        "e.location.href",
+        "e.storage.token",
+        "e.style.color",
+    ]) {
+        assert.throws(
+            () => cl.evalCL(["cl:setf", path, "x"], { e: event }),
+            /no data place/,
+            path,
+        );
+        assert.throws(
+            () => cl.evalCL(["cl:incf", path], { e: event }),
+            ClJsonError,
+            path,
+        );
+    }
+    assert.equal(event.location.href, "/");
+    assert.throws(
+        () =>
+            cl.evalCL(
+                ["cl:setf", ["cl:getf", ["cl:getf", "loc"], ":href"], "x"],
+                {
+                    loc: event.location,
+                },
+            ),
+        /no data place/,
+    );
+    // Plain data - including null-prototype objects and arrays - is writable.
+    const state = { bare: Object.create(null), list: [1, 2] };
+    cl.evalCL(["cl:setf", "bare.a", 1, "list.1", 9], state);
+    assert.equal(state.bare.a, 1);
+    assert.deepEqual(state.list, [1, 9]);
+});
+
+test("a handler that fails after changing state still re-renders", () => {
+    const { document } = setup();
+    const target = document.createElement("div");
+    document.body.appendChild(target);
+    const view = mount(
+        target,
+        [
+            ":button",
+            {
+                id: "b",
+                "on-click": [
+                    "cl:lambda",
+                    [],
+                    ["cl:incf", "n"],
+                    ["cl:error", "boom ~a", ["cl:getf", "n"]],
+                ],
+            },
+            ["cl:getf", "n"],
+        ],
+        { n: 0 },
+        { document },
+    );
+    assert.throws(() => target.querySelector("#b").dispatch("click"), /boom 1/);
+    assert.equal(view.state.n, 1);
+    assert.equal(target.textContent, "1", "the view shows the new state");
+});
+
+test("cl:defvar copies plain data deeply, keeps the rest by reference", () => {
+    const fn = () => 1;
+    const literal = { list: [{ n: 1 }], fn, nested: { deep: true } };
+    literal.self = literal;
+    const state = {};
+    evalCL(["cl:defvar", "data", ["cl:quote", literal]], state);
+    assert.notEqual(state.data, literal);
+    assert.notEqual(state.data.list[0], literal.list[0]);
+    assert.deepEqual(state.data.list, [{ n: 1 }]);
+    assert.equal(state.data.fn, fn);
+    assert.equal(state.data.self, state.data, "cycles are preserved");
+    assert.deepEqual(literal.list, [{ n: 1 }]);
 });
 
 test("mount re-renders after a handler changes state", () => {

@@ -4,7 +4,7 @@
 strings with a package prefix (`"cl:car"`, `"app:save"`), keywords are strings with a colon (`":div"`). This document
 lists what is supported, what is not, and what to add next - in the order that keeps the core small.
 
-Footprint today: about 25 KB minified, **about 9 KB gzipped**, no dependencies. That is the budget to defend: the
+Footprint today: about 25 KB minified, **about 9.5 KB gzipped**, nothing bundled but this library. That is the budget to defend: the
 guiding rule below is to grow the language with Lisp itself (macros), not with more JavaScript.
 
 ## 1. Supported
@@ -26,8 +26,9 @@ guiding rule below is to grow the language with Lisp itself (macros), not with m
 ### Special forms and macros
 
 `quote`, `function`, `progn`, `if`, `when`, `unless`, `cond`, `case` (with `otherwise` / `t`), `and`, `or`, `let`,
-`let*`, `dolist`, `dotimes`, `lambda` (`&optional` with defaults, `&rest`), `defun`, `defvar`, `setq`, `setf`
-(variable paths and `getf` places), `incf`, `decf`, `push`, `getf`, `symbol-value`, `assoc`.
+`let*`, `dolist`, `dotimes`, `lambda` (`&optional` with defaults, `&rest`; any other `&`-keyword is an error),
+`defun`, `defvar`, `setq`, `setf` (variable paths and `getf` places), `incf`, `decf`, `push`, `getf`, `symbol-value`,
+`assoc`.
 
 **Scopes:** `let`, `let*`, `dolist`, `dotimes` and lambdas bind in a new scope layer (chained with `Object.create`), so
 inner bindings shadow and never leak. `setq` / `setf` assign the nearest binding; an unbound name is set in the
@@ -50,9 +51,9 @@ prin1-to-string concatenate`
 
 ### `format` directives
 
-`~a ~s ~d ~b ~o ~x ~f ~$ ~p ~% ~& ~~ ~*`, iteration `~{ ~}` with `~^`, `~:{` and `~@{`, conditionals `~[ ~; ~]`,
-`~:[ ~; ~]`, `~@[ ~]`, the `:` / `@` modifiers of `~d` and `~p`, numeric prefix parameters (`~5d`, `~,2f`), and
-tilde-newline.
+`~a ~s ~d ~b ~o ~x ~f ~$ ~p ~% ~& ~~ ~*`, iteration `~{ ~}` with `~^`, `~:{` and `~@{`, conditionals `~[ ~; ~]`
+(with a `~:;` default clause), `~:[ ~; ~]`, `~@[ ~]`, the `:` / `@` modifiers of `~d` and `~p`, numeric prefix
+parameters (`~5d`, `~,2f`), and tilde-newline. `~d`, `~f` and `~$` print a non-number as `~a` would, as in CL.
 
 ## 2. Not supported
 
@@ -85,12 +86,20 @@ tilde-newline.
 - Bodies (`progn`, `when`, `let`, ...) return their **last value**, as in CL - to emit several siblings, return a list:
   `["cl:when", c, [[":p", "a"], [":p", "b"]]]`.
 - An **unbound variable reads as `NIL`** instead of signalling an error; so does a missing property in a path.
-- Variables are read only with `cl:getf` / `cl:symbol-value` - a bare string is always text.
+- Variables are read only with `cl:getf` / `cl:symbol-value` - a bare string is always text. One exception to "a list
+  with no operator in front is a list": a list whose **first element is a bare string of the shape `pkg:name`**
+  (`["app:save", ...]`, but also `["Price:5", ...]`) is a function call. Write literal lists with `cl:list` or
+  `cl:quote`.
 - `getf` with one argument reads a dotted **path** (`"user.name"`); `setf`, `incf`, `push` take paths as places.
+  `setf` writes into **plain data only** (JSON objects and arrays), never into DOM nodes or other host objects.
 - Function **arity is lenient**, as in JavaScript: missing arguments are `NIL`, extra ones are ignored.
+- The **arithmetic functions and `incf` / `decf` signal an error on a non-number** (so `(incf unbound)` is an error,
+  as in CL), and `mod`, `rem`, `floor`, ... on a zero divisor.
 - `eq` and `eql` are the same comparison; `case` and `getf` compare keywords with or without the leading colon
   (`":admin"` matches `"admin"`).
-- `defvar` stores a **copy** of its value, so state changes never edit the payload's own literals.
+- `concatenate` takes its result type as `"list"`, `":list"` or `"cl:list"` (and the same for `string`).
+- `defvar` stores a **deep copy** of the plain data in its value (functions and host objects by reference), so state
+  changes never edit the payload's own literals.
 - Only `NIL` is false - but `false` and `[]` from JSON are `NIL` too.
 
 ## 3. To implement, in order
@@ -136,7 +145,7 @@ plist-backed macro, packages, the reader, `eval` / `compile`, streams and file I
 ## Rules for growing it
 
 - **Macros before primitives.** A new feature is a JSON-CL macro unless it cannot be one.
-- **Measure.** Track the gzipped bundle (`gzip -9 -c dist/cl-json.min.js | wc -c`, ~9 KB today); a step that adds more
+- **Measure.** Track the gzipped bundle (`gzip -9 -c dist/cl-json.min.js | wc -c`, ~9.5 KB today); a step that adds more
   than about 1 KB gzipped needs a reason.
 - **Opt-in.** Large libraries (the `loop` subset, hash tables) can be separate prelude files a page includes only when
   it uses them.

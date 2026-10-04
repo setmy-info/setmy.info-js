@@ -6,7 +6,7 @@
 
 import { mount } from "./cl-sdui-interpreter.js";
 import { ClJsonError } from "./core.js";
-import { include, load } from "./loader.js";
+import { include, load, showError } from "./loader.js";
 
 export {
     createInterpreter,
@@ -39,7 +39,10 @@ export const SCRIPT_TYPE = "application/cl+json";
  * type themselves: this loads it - `include()`, see loader.js.
  *
  * Inline payloads are mounted before this returns; payloads with `src` once
- * their files have arrived.
+ * their files have arrived. Every payload is attempted: one that fails
+ * (bad JSON, an evaluation error, a missing resource) gets its reason written
+ * into its target (and `data-cl-json-error` set), the others are mounted as
+ * usual, and the promise rejects with the first failure once all are done.
  * @param {ParentNode} [root] Where to look; default `document`.
  * @param {object} [options] Interpreter options, see `createInterpreter`, plus
  *     `fetch` (default `globalThis.fetch`).
@@ -66,42 +69,76 @@ export function renderScripts(root = globalThis.document, options = {}) {
         return target;
     }
 
-    const views = Array.from(
-        root.querySelectorAll(`script[type="${SCRIPT_TYPE}"]`),
-        (script) => {
-            const target = targetOf(script);
+    function inlineState(script) {
+        const stateId = script.getAttribute("data-state");
+        if (!stateId) {
+            return {};
+        }
+        const stateElement = doc.getElementById(stateId);
+        if (!stateElement) {
+            throw new ClJsonError(`data-state ${stateId}: no such element`);
+        }
+        return JSON.parse(stateElement.textContent);
+    }
+
+    function payloadOf(script) {
+        return JSON.parse(script.textContent);
+    }
+
+    // The view of one script tag: a handle, or a promise of one. Errors
+    // before the target is known are thrown; after it, they are written
+    // into the target and rethrown (`include` does the same for `src`).
+    function view(script) {
+        const target = targetOf(script);
+        try {
             const src = script.getAttribute("src");
             const stateSrc = script.getAttribute("data-state-src");
-            const stateId = script.getAttribute("data-state");
-            const stateElement = stateId ? doc.getElementById(stateId) : null;
-            const state = stateElement
-                ? JSON.parse(stateElement.textContent)
-                : {};
+            const state = inlineState(script);
             if (!src && !stateSrc) {
-                return mount(
-                    target,
-                    JSON.parse(script.textContent),
-                    state,
-                    mountOptions,
-                );
+                return mount(target, payloadOf(script), state, mountOptions);
             }
             const loading = stateSrc
                 ? load(stateSrc, { fetch: fetchFn })
                 : Promise.resolve(state);
-            return loading.then((loadedState) =>
-                src
-                    ? include(target, src, loadedState, {
-                          ...mountOptions,
-                          fetch: fetchFn,
-                      })
-                    : mount(
-                          target,
-                          JSON.parse(script.textContent),
-                          loadedState,
-                          mountOptions,
-                      ),
-            );
+            return loading
+                .then((loadedState) =>
+                    src
+                        ? include(target, src, loadedState, {
+                              ...mountOptions,
+                              fetch: fetchFn,
+                          })
+                        : mount(
+                              target,
+                              payloadOf(script),
+                              loadedState,
+                              mountOptions,
+                          ),
+                )
+                .catch((error) => {
+                    showError(target, error, doc);
+                    throw error;
+                });
+        } catch (error) {
+            showError(target, error, doc);
+            throw error;
+        }
+    }
+
+    const views = Array.from(
+        root.querySelectorAll(`script[type="${SCRIPT_TYPE}"]`),
+        (script) => {
+            try {
+                return Promise.resolve(view(script));
+            } catch (error) {
+                return Promise.reject(error);
+            }
         },
     );
-    return Promise.all(views);
+    return Promise.allSettled(views).then((results) => {
+        const failed = results.find((result) => result.status === "rejected");
+        if (failed) {
+            throw failed.reason;
+        }
+        return results.map((result) => result.value);
+    });
 }

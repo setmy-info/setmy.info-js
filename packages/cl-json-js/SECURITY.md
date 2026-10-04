@@ -28,7 +28,9 @@ Even from a trusted payload, the runtime refuses the usual ways to inject script
   shown as text.
 - **No `<script>` elements.** A `:script` tag is refused with an error.
 - **No dangerous URLs.** `javascript:`, `vbscript:` and non-image `data:` URLs are dropped from `href`, `src`,
-  `action`, `formaction`, `xlink:href`, `poster`, `cite`, `background` and `ping`.
+  `action`, `formaction`, `data`, `xlink:href`, `poster`, `cite`, `background` and `ping`. An SVG `data:` image (which
+  may carry script) is allowed only where it is merely drawn - `<img>` and SVG `<image>` - never in `<iframe>`,
+  `<object>`, `<a>`, ...
 - **No `srcdoc`.** The attribute is dropped.
 - **No string event handlers.** `:onclick "alert(1)"` is refused; event attributes accept only functions made by the
   interpreter (`cl:lambda`, `cl:function`).
@@ -37,7 +39,10 @@ Even from a trusted payload, the runtime refuses the usual ways to inject script
   you register through the `functions` option. A JavaScript function reachable through the data (`window.eval`, a
   function in your state, ...) cannot be called.
 - **No prototype pollution.** Variable paths refuse `__proto__`, `prototype` and `constructor`.
-- **Data writes only.** `cl:setf`, `cl:incf`, ... write data: never into DOM nodes (`innerHTML`, ...) or `window`.
+- **Data writes only.** `cl:setf`, `cl:incf`, ... write into plain data only - objects with Object's (or no)
+  prototype and arrays, what JSON gives - never into DOM nodes (`innerHTML`, ...), `window`, or any other host object
+  a path can reach from an event (`e.view.location.href`, `e.view.localStorage`, `e.target.style`). Reading through
+  such paths is allowed (`["cl:getf", "e.target.value"]`).
 
 What it does **not** do:
 
@@ -94,15 +99,16 @@ set, so the page shows why instead of staying empty.
 3. **Inline payloads** - the JSON as the content of `<script type="application/cl+json">` - need no file and work from
    disk as they are.
 
-## The development server
+## The module's instance
 
-`src/server.js` (`npm run server`) serves the `web/` folder, read-only, for development and the e2e tests:
+`src/server.js` (`npm run server`) serves the `web/` folder, read-only, for development and the e2e tests, configured
+like every module of the repository through `resources/application.yaml` (`@setmy-info/commons`):
 
-- It listens on **all interfaces** by default, so a Selenium Grid on another machine can reach it: anyone on your
-  network can then read `web/`. Use `HOST=127.0.0.1 npm run server -w @setmy-info/cl-json-js` to keep it on your own
-  machine.
-- It serves only files under `web/` (paths leaving it answer 404), sends no CORS headers, and is not meant for
-  production: put the payloads behind your real backend there.
+- It listens on **all interfaces** by default (`smi.server.host: 0.0.0.0`), so a Selenium Grid on another machine can
+  reach it: anyone on your network can then read `web/`. `SMI_SERVER_HOST=127.0.0.1 npm run server -w
+@setmy-info/cl-json-js` (or the `live` profile, `SMI_PROFILES=live`) keeps it on your own machine.
+- It serves only files under `web/` (paths leaving it, and malformed URLs, answer 404), sends no CORS headers, and is
+  not meant for production: put the payloads behind your real backend there.
 
 ## End-to-end tests
 

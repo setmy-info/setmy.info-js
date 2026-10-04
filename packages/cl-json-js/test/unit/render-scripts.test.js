@@ -109,8 +109,46 @@ test("data-target takes an id or a selector; mount takes an element id", async (
     );
 
     script(document, SCRIPT_TYPE, "[]", { "data-target": "nope" });
-    assert.throws(
-        () => renderScripts(document),
+    await assert.rejects(
+        renderScripts(document),
         /data-target nope: no such element/,
     );
+});
+
+test("renderScripts attempts every payload; a failure is written into its target", async () => {
+    const document = new FakeDocument();
+    const first = script(document, SCRIPT_TYPE, '[":p", "first"]');
+    const broken = script(document, SCRIPT_TYPE, '["cl:nope"]');
+    const badJson = script(document, SCRIPT_TYPE, "[not json");
+    const noState = script(document, SCRIPT_TYPE, '[":p", "x"]', {
+        "data-state": "missing-state",
+    });
+    const slot = document.createElement("div");
+    slot.setAttribute("id", "slot");
+    document.body.appendChild(slot);
+    script(document, SCRIPT_TYPE, '[":p", ["cl:getf", "x"]]', {
+        "data-target": "slot",
+        "data-state-src": "missing.json",
+    });
+    const third = script(document, SCRIPT_TYPE, '[":p", "third"]');
+
+    await assert.rejects(
+        renderScripts(document, {
+            fetch: async () => ({ ok: false, status: 404 }),
+        }),
+        /Undefined operator: cl:nope/,
+    );
+
+    assert.equal(html(first.nextSibling), "<div><p>first</p></div>");
+    assert.equal(html(third.nextSibling), "<div><p>third</p></div>");
+    for (const [tag, message] of [
+        [broken, "Undefined operator: cl:nope"],
+        [noState, "data-state missing-state: no such element"],
+    ]) {
+        assert.equal(tag.nextSibling.textContent, message);
+        assert.equal(tag.nextSibling.getAttribute("data-cl-json-error"), "");
+    }
+    assert.match(badJson.nextSibling.textContent, /JSON/);
+    assert.equal(slot.textContent, "missing.json: HTTP 404");
+    assert.equal(slot.getAttribute("data-cl-json-error"), "");
 });
